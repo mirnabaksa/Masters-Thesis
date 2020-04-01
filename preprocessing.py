@@ -8,7 +8,7 @@ from os import listdir
 from os.path import isfile, join
 
 from statistics import mean, median, stdev
-from scipy.stats import mode, skew, hmean, gmean, entropy
+from scipy.stats import mode, skew, hmean, gmean, entropy, iqr
 
 import sys
 csv.field_size_limit(sys.maxsize)
@@ -18,12 +18,10 @@ def constructDatasetCSV(root_dir, dataset_name):
     with open('csv/' + dataset_name, 'w') as dataset_file:
         file_writer = csv.writer(dataset_file)
         file_writer.writerow(("file", "label"))
-        label_count = 0
         for sub_dir in listdir(root_dir):
             label = sub_dir
-            if (not (label == "bacillus_anthracis" or label == "ecoli")):
+            if (not (label == "bacillus_anthracis" or label == "ecoli" or label == "pseudomonas_koreensis")):
                 continue
-            label_count += 1
             
             target_dir = join(root_dir, sub_dir)
             for filename in listdir(target_dir):
@@ -47,19 +45,20 @@ def constructRawSignalValuesCSV(dataset_csv,  name = 'raw_dataset.csv'):
         f = h5py.File(filename, 'r')
         data = np.array(f["Raw"]["Reads"]["Read_981"]["Signal"]).astype(np.float)
         data = minmax_scale(data, feature_range = (0,1))
+        #data = normalize([data])[0]
 
         for i in range(len(data)//read_len + 1):
             data_chunk = data[i*read_len : (i+1)*read_len]
             data_str =  ','.join([str(num) for num in data_chunk])
             df = df.append({'raw_data' : data_str, 'label' : label}, ignore_index = True)
-
+    
     df.to_csv('csv/' + name)
     print('csv/' + name + " created!")
     
 
 from sklearn.preprocessing import minmax_scale, normalize
 
-def constructStatsDataset(source = "raw_dataset.csv", dest = "stats_dataset.csv", chunk = 15):
+def constructStatsDataset(source = "raw_dataset.csv", dest = "stats_dataset.csv", chunk = 200):
     df_raw = pd.read_csv('csv/' + source)  
     column_names = ["label","stats_data"]
     df = pd.DataFrame(columns=column_names)
@@ -79,17 +78,21 @@ def constructStatsDataset(source = "raw_dataset.csv", dest = "stats_dataset.csv"
             if len(data_chunk) < 2:
                 continue
             
-            data_mean, data_hmean, data_gmean = mean(data_chunk), hmean(data_chunk), gmean(data_chunk)
+            data_mean, data_gmean = mean(data_chunk), gmean(data_chunk)
             data_median = median(data_chunk)
             data_stdev = stdev(data_chunk)
             data_entropy = entropy(data_chunk)
+            data_iqr = iqr(data_chunk)
             #data_mod = mode(data_chunk)[0][0]
             #data_skew = skew(data_chunk)
             means.append(data_mean)
-            stats_data.append(",".join([str(data_mean), str(data_hmean), str(data_gmean), str(data_median), str(data_stdev), str(data_entropy)]))
+            stats = [data_mean, data_gmean, data_median, data_stdev, data_entropy, data_iqr]
+            #stats = minmax_scale(stats)
+            stats_data.append(",".join([str(param) for param in stats]))
         
         df = df.append({'label' : label, 'stats_data' : '$'.join(stats_data)}, ignore_index = True)
     
+    df = df.sample(frac=1).reset_index(drop=True)
     df.to_csv('csv/' + dest)
     print("csv/" + dest + " created!")
 

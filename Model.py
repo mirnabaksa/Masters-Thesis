@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from time import time
+import torch.nn.functional as F
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -40,15 +41,16 @@ class Encoder(nn.Module):
     def __init__(self, input_size, hidden_size, n_layers = 1):
         super(Encoder, self).__init__()
         self.hidden_size = hidden_size
-        self.RNN = nn.GRU(input_size, hidden_size, num_layers = n_layers, batch_first = True)
+        self.NN = nn.LSTM(input_size, hidden_size, num_layers = n_layers, batch_first = True)
+        self.relu = nn.ReLU()
 
     def forward(self, input, hidden = None):
-        self.RNN.flatten_parameters()
-        output, hidden = self.RNN(input, hidden)
+        self.NN.flatten_parameters()
+        output, hidden = self.NN(input, hidden)
         return output, hidden
 
     def get_latent(self, input):
-        _, hidden = self.RNN(input, None)
+        _, hidden = self.NN(input, None)
         return hidden[-1].squeeze()
 
 class Decoder(nn.Module):
@@ -57,12 +59,14 @@ class Decoder(nn.Module):
         self.hidden_size = hidden_size
         self.n_layers = n_layers
 
-        self.RNN = nn.GRU(output_size, hidden_size, num_layers = n_layers, batch_first = True)
+        self.NN = nn.LSTM(output_size, hidden_size, num_layers = n_layers, batch_first = True)
         self.out = nn.Linear(hidden_size, output_size)
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, input, hidden = None):
-        self.RNN.flatten_parameters()
-        output, hidden = self.RNN(input, hidden)
+        self.NN.flatten_parameters()
+        output, hidden = self.NN(input, hidden)
+       # output = self.sigmoid(self.out(output))
         output = self.out(output)
         return output, hidden
 

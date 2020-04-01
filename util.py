@@ -29,6 +29,17 @@ def timeSince(since, percent):
     rs = es - s
     return '%s (- %s)' % (asMinutes(s), asMinutes(rs))
 
+def showPlotFromFile(filename = "data.txt"):
+    train = []
+    validation = []
+    with open(filename, "r") as f:
+        for line in f:
+            t, v = line.split(",")
+            train.append(float(t))
+            validation.append(float(v))
+            
+    showPlot(train[10:], validation[10:], filename = "figures/loss-clipped.png")
+
 
 def showPlot(train, validation = None, filename = "figures/loss.png"):
     plt.plot(train)
@@ -81,9 +92,8 @@ def scatter(x, labels, distinct_labels, name, subtitle=None):
   
     f = plt.figure(figsize=(8, 8))
     ax = plt.subplot(aspect='equal')
-    sc = ax.scatter(x[:,0], x[:,1], lw=0, s=40, c=colors)
-    plt.xlim(-10, 10)
-    plt.ylim(-10, 10)
+
+    sc = ax.scatter(x[:,0], x[:,1], s = 40,  c=colors)
     ax.axis('off')
     ax.axis('tight')
     

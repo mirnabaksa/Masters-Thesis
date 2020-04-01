@@ -9,10 +9,11 @@ from torch import optim
 from torch.nn import MSELoss
 from torch.nn.utils.rnn import  pad_sequence, pack_padded_sequence, pad_packed_sequence
 from torch.utils.data import DataLoader
+from sklearn.preprocessing import MinMaxScaler
 
 import numpy as np
 
-from util import asMinutes, timeSince, showPlot, timeNow, constructDatasetCSV, knn, visualize
+from util import asMinutes, timeSince, showPlot, timeNow, knn, visualize, showPlotFromFile
 from Model import AutoEncoder
 from SignalDataset import Signal, SignalDataset, TestDataset, StatsTestDataset, StatsDataset
 
@@ -35,21 +36,22 @@ def collate(input):
     #return out, padded, labels, max_len, lens
   
  
-def train(train_dataset, validation_dataset, vector_size = 1, iterations = 500, hidden_size = 256, batch_size = 16):
+def train(train_dataset, validation_dataset, vector_size = 1, iterations = 10000, hidden_size = 256, batch_size = 50):
     print("Training...")
     print("Start time (2 hours behind)...", time.strftime("%H:%M:%S", time.localtime()))
     start_time = time.time()
     train = DataLoader(train_dataset, batch_size = batch_size, shuffle = True, pin_memory = True, collate_fn = collate)
     validation = DataLoader(validation_dataset, batch_size = batch_size, shuffle = True, pin_memory = True, collate_fn = collate)
+    f =  open('data.txt', 'w')
 
-    model = AutoEncoder(vector_size, hidden_size, vector_size, n_layers = 3)
+    model = AutoEncoder(vector_size, hidden_size, vector_size, n_layers = 1 )
     if torch.cuda.device_count() > 1:
         print("Using", torch.cuda.device_count(), "GPUs!")
         model = nn.DataParallel(model)
     
     model = model.to(device, non_blocking = True)
     optimizer = optim.Adam(model.parameters())
-    criterion = nn.MSELoss()
+    criterion = nn.L1Loss()
 
     train_losses = []
     validation_losses = []
@@ -65,7 +67,6 @@ def train(train_dataset, validation_dataset, vector_size = 1, iterations = 500, 
 
             outputs = model(input_tensor, target_tensor, max_len, lens)
             
-    
             model.zero_grad()
             batch_loss = criterion(outputs[:,1:].squeeze(), target_tensor[:,1:].squeeze())
             batch_loss.backward(retain_graph = True)
@@ -89,6 +90,8 @@ def train(train_dataset, validation_dataset, vector_size = 1, iterations = 500, 
         
             validation_losses.append(val_loss_acc/len(validation)) 
 
+        f.write(str(loss_acc/len(train)) +  "," + str(val_loss_acc/len(validation)) + "\n")
+    
         if iter%1 == 0:
             print("Iteration:", iter, 
             " Train loss: ", "{0:.5f}".format(loss_acc/len(train)), 
@@ -103,6 +106,7 @@ def train(train_dataset, validation_dataset, vector_size = 1, iterations = 500, 
         #    print(iter)
         #    break
         
+    f.close()
     showPlot(train_losses, validation_losses)
     torch.save(model, "models/autoencoder.pt")
 
@@ -192,22 +196,25 @@ if __name__ == '__main__':
         print("Using test data")
     elif (args.teststats):
         dataset = StatsTestDataset()
-        vec_size = 6
+        vec_size = dataset.get_vector_len()
     elif (args.stats):
-        dataset = StatsDataset("csv/stats_scaled_dataset.csv")
-        vec_size = 6
+        dataset = StatsDataset("csv/perfect-stats.csv")
+        vec_size = dataset.get_vector_len()
     else:
         dataset = SignalDataset("../Signals/full_dataset/", "csv/dataset-twoclasses.csv", raw = True)
         print("Using real data")
     
-    train_size = int(0.8 * len(dataset))
+    train_size = int(0.8 * len(dataset)) +1
     val_test_size = (len(dataset) - train_size) // 2
+    print(train_size, val_test_size, train_size + val_test_size * 2, len(dataset))
     print("Dataset length: ", str(train_size) + " train, " + str(val_test_size) + " test!")
     train_dataset, validation_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size,  val_test_size, val_test_size])  
  
     if (args.train):
         train(train_dataset, validation_dataset, vector_size = vec_size)
-    
+
+    showPlotFromFile("data.txt")
+
     print("Starting evaluation phase")
     dataloader = DataLoader(train_dataset, batch_size = 1, shuffle = True, pin_memory = True, collate_fn = collate)
     model = torch.load("models/autoencoder.pt")
@@ -215,7 +222,7 @@ if __name__ == '__main__':
     test_dataloader = DataLoader(test_dataset, batch_size = 1, shuffle = True, pin_memory = True, collate_fn = collate)
     train_dataloader = DataLoader(train_dataset, batch_size = 1, shuffle = True, pin_memory = True, collate_fn = collate)
     print("Evaluating train")
-    evaluate(train_dataloader, False)
+    evaluate(train_dataloader, True)
     print("Evaluating test")
     evaluate(test_dataloader, True)
    

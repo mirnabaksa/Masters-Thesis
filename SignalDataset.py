@@ -5,7 +5,7 @@ import h5py
 import pandas as pd
 import os
 import numpy as np
-from math import sin, cos, tan, atan
+from math import sin, cos, tan, atan, sqrt, exp
 
 from statistics import mean, median, stdev
 from scipy.stats import mode, hmean, gmean, entropy
@@ -18,10 +18,13 @@ from sklearn import preprocessing
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+torch.set_printoptions(precision=10)
 SOS_token = 10.0
 EOS_token = 10.0
 
-SOS_MEAN, SOS_HMEAN, SOS_GMEAN,  SOS_MEDIAN, SOS_STDEV, SOS_EN = -20,-30,-40, -50, -60, -70
+SOS_MEAN, SOS_GMEAN,  SOS_MEDIAN, SOS_STDEV, SOS_EN, SOS_IQR = 10,11,12,13,14, 14
+
+class GeneralDataset(self, reference_csv, )
 
 class TripletTestDataset(Dataset):
     def __init__(self):
@@ -117,17 +120,27 @@ class StatsDataset(Dataset):
 
     def __init__(self, reference_csv, raw = True):
         self.reference = pd.read_csv(reference_csv, delimiter = ",", header = None)
+        self.startVector = [SOS_MEAN, SOS_STDEV, SOS_IQR, SOS_EN, SOS_MEDIAN]
 
         self.df = pd.DataFrame(columns = ["data", "label"])
 
         for i in range(1, len(self.reference)):
             index, label, data = self.reference.loc[i]
-            data = [[float(mean), float(hmean), float(gmean), float(med), float(stdev), float(entropy)] for mean,hmean, gmean,  med, stdev, entropy in [line.split(",") for line in data.split("$")]]
+            data = [[float(mean), float(stdev), float(iqr), float(entropy), float(med)] for mean, gmean,  med, stdev, entropy, iqr in [line.split(",") for line in data.split("$")]]
+            
+            #means = minmax_scale(self.column(data, 0))
+            #stdevs = minmax_scale(self.column(data, 1))
+            #entropies = minmax_scale(self.column(data, 2))
 
-            data.insert(0, [SOS_MEAN, SOS_HMEAN, SOS_GMEAN, SOS_MEDIAN, SOS_STDEV, SOS_EN])
+            #data = np.column_stack((means, stdevs))
+            #data = np.insert(data, 0, self.startVector, axis = 0)
             self.df = self.df.append({"data" : data, "label" : label}, ignore_index = True)
 
+
         self.n = len(self.df)
+
+    def column(self, matrix, i):
+        return [row[i] for row in matrix]
 
     def __len__(self):
         return self.n
@@ -139,23 +152,25 @@ class StatsDataset(Dataset):
     def get_distinct_labels(self):
         return ["bacillus_anthracis", "ecoli", "pseudomonas_koreensis"]
 
+    def get_vector_len(self):
+        return len(self.startVector)
+
 class StatsTestDataset(Dataset):
 
     def __init__(self):
         n_classes = 4
-        n_points = 100
-        self.chunk = 10
+        n_points = 50
+        self.chunk = 100
+        self.startVector = [SOS_MEAN, SOS_STDEV]
 
-        l = 5
-        r = 10
+        l = 30000
+        r = 40000
 
         self.data = []
         for i in range(n_points):
             test_sample = []
-            x = uniform(-0.2,0.2)
             x_len = randint(l, r)
-            data = [sin(-x+0.02*i) for i in range(x_len)]
-            data = minmax_scale(data, feature_range = (0,5))
+            data = [sin(-x*x+0.02) for x in range(300, 600)]
             stats_data = self.generateStatsData(data)
             self.data.append((stats_data, 1))
 
@@ -163,8 +178,7 @@ class StatsTestDataset(Dataset):
             test_sample = []
             x = uniform(-0.2,0.2)
             x_len = randint(l, r)
-            data = [cos(x-0.08*i) for i in range(x_len)]
-            data = minmax_scale(data, feature_range = (0,5))
+            data = [x * exp(x) for x in range(300, 600)]
             stats_data = self.generateStatsData(data)
             self.data.append((stats_data, 2))  
      
@@ -172,8 +186,7 @@ class StatsTestDataset(Dataset):
             test_sample = []
             x = uniform(-0.2,0.2)
             x_len = randint(l, r)
-            data = [sin(2*x+0.1*i) for i in range(x_len)]
-            data = minmax_scale(data, feature_range = (0,5))
+            data = [x * x *tan(2*x+0.1) for x in range(300, 600)]
             stats_data = self.generateStatsData(data)
             self.data.append((stats_data, 3)) 
 
@@ -181,14 +194,14 @@ class StatsTestDataset(Dataset):
             test_sample = []
             x = uniform(-0.2,0.2)
             x_len = randint(l, r)
-            data = [cos(-2*x*x+0.25*i) for i in range(x_len)]
-            data = minmax_scale(data, feature_range = (0,5))  
+            data = [cos(-2*sqrt(x)+0.25) for x in range(300, 600)] 
             stats_data = self.generateStatsData(data)
             self.data.append((stats_data, 4))
 
         self.n = n_classes * n_points
 
     def generateStatsData(self, data):
+        data = minmax_scale(data, feature_range = (0,1)) 
         stats_data = []
         for i in range(len(data)//self.chunk+1):
                 data_chunk = data[i*self.chunk : (i+1)*self.chunk]
@@ -199,8 +212,8 @@ class StatsTestDataset(Dataset):
                     stats_data.append([data_chunk[0], data_chunk[0], 0])
                     continue
 
-                data_mean, data_hmean, data_gmean, data_median, data_stdev, en = mean(data_chunk), hmean(data_chunk), gmean(data_chunk), median(data_chunk),  stdev(data_chunk), entropy(data_chunk)
-                stats_data.append([data_mean, data_hmean, data_gmean, data_median, data_stdev, en])
+                data_mean, data_median, data_stdev, en = mean(data_chunk), median(data_chunk),  stdev(data_chunk), entropy(data_chunk)
+                stats_data.append([data_mean, data_stdev])
         return stats_data
 
     def __len__(self):
@@ -209,13 +222,14 @@ class StatsTestDataset(Dataset):
     def __getitem__(self, idx):
         data, label = self.data[idx]
         copy = data.copy()
-        copy.insert(0, [SOS_MEAN, SOS_HMEAN, SOS_GMEAN, SOS_MEDIAN, SOS_STDEV, SOS_EN])
-        #print(torch.FloatTensor(copy))
-        #print(copy)
+        copy.insert(0, self.startVector)
         return torch.FloatTensor(copy), label
 
     def get_distinct_labels(self):
         return [1,2,3,4]
+
+    def get_vector_len(self):
+        return len(self.startVector)
 
 
 class TestDataset(Dataset):
