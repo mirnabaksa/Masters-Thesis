@@ -8,7 +8,7 @@ import numpy as np
 from math import sin, cos, tan, atan, sqrt, exp
 
 from statistics import mean, median, stdev
-from scipy.stats import mode, hmean, gmean, entropy
+from scipy.stats import mode, hmean, gmean, entropy, iqr
 
 import random
 from random import uniform, randint, choice
@@ -24,7 +24,286 @@ EOS_token = 10.0
 
 SOS_MEAN, SOS_GMEAN,  SOS_MEDIAN, SOS_STDEV, SOS_EN, SOS_IQR = 10,11,12,13,14, 14
 
-class GeneralDataset(self, reference_csv, )
+class TripletStatsDataset(Dataset):
+
+    def __init__(self, data):
+        self.flat_data = pd.DataFrame(columns = ["stats_data", "label"])
+
+        for i in range(len(data)):
+            stat, label = data[i]
+            self.flat_data = self.flat_data.append({"stats_data" : stat, "label" : label}, ignore_index = True)
+
+        self.data = pd.DataFrame(columns = ["anchor", "positive", "negative", "label"])
+
+        for stats, label in self.flat_data.values.tolist():
+            for other_label in self.get_distinct_labels():
+                if label == other_label:
+                    continue
+                    
+                positive, labp = self.flat_data.loc[self.flat_data['label'] == label].sample().values[0]
+                negative, labn = self.flat_data.loc[self.flat_data['label'] == other_label].sample().values[0]
+                self.data = self.data.append({"anchor" : stats, "positive" : positive, "negative" : negative, "label" : label}, ignore_index = True)
+           
+        self.n = len(self.data)
+        print("Effective length: ", self.n)
+
+    def __getitem__(self, idx):
+        anchor, positive, negative, label = self.data.iloc[idx]
+        return torch.FloatTensor(anchor), torch.FloatTensor(positive), torch.FloatTensor(negative), label
+
+    def __len__(self):
+        return self.n
+
+    def get_distinct_labels(self):
+        return ["bacillus_anthracis", "pseudomonas_koreensis", "ecoli", "yersinia_pestis", "pantonea_agglomerans"]
+
+
+class StatsSubsetDataset(Dataset):
+
+    def __init__(self, subset, wrapped = False):
+        self.subset = subset
+        self.n = len(subset)
+        self.n_stats = len(subset[0][0][0])
+        self.wrapped = wrapped
+        
+        self.startVector = [10, 11, 12, 13, 14]
+        cols = [[] for j in range(self.n_stats)]
+
+        for point in self.subset:
+            matrix, label = point
+            for col in range(self.n_stats):
+                column = self.column(matrix, col)
+                cols[col].extend(column)
+        
+        col_stats = []
+        for col in cols:
+            col_mean, stdev_mean = mean(col), stdev(col)
+            col_stats.append((col_mean, stdev_mean))
+        
+        self.df = pd.DataFrame(columns = ["data", "label"])
+        for point in self.subset:
+            matrix, label = point
+            data = []
+            for row in matrix:
+                data_row = []
+                for i in range(len(row)):
+                    col_mean, col_stdev = col_stats[i]
+                    data_row.append((row[i] - col_mean) / col_stdev)
+                
+                data.append(data_row)
+            if (not self.wrapped):
+                data.insert(0, self.startVector)
+            self.df = self.df.append({"data" : data, "label" : label}, ignore_index = True)
+     
+
+    def column(self, matrix, i):
+        return [row[i] for row in matrix]
+
+    def __len__(self):
+        return self.n
+
+    def __getitem__(self, idx):
+        data, label = self.df.loc[idx]
+        if self.wrapped:
+            return data, label
+        return torch.FloatTensor(data), label
+
+    def get_distinct_labels(self):
+        return ["bacillus_anthracis", "ecoli", "pseudomonas_koreensis", "yersinia_pestis", "pantonea_agglomerans"]
+    
+    def get_vector_len(self):
+        return len(self.startVector)
+
+
+
+class StatsDataset(Dataset):
+
+    def __init__(self, reference_csv, raw = True):
+        self.reference = pd.read_csv(reference_csv, delimiter = ",", header = None)
+        self.df = pd.DataFrame(columns = ["data", "label"])
+
+        for i in range(1, len(self.reference)):
+            index, label, data = self.reference.loc[i]
+            data = [[float(mean), float(stdev), float(iqr), float(entropy), float(med)] for mean, gmean,  med, stdev, entropy, iqr in [line.split(",") for line in data.split("$")]]
+            self.df = self.df.append({"data" : data, "label" : label}, ignore_index = True)
+        self.n = len(self.df)
+
+    def column(self, matrix, i):
+        return [row[i] for row in matrix]
+
+    def __len__(self):
+        return self.n
+
+    def __getitem__(self, idx):
+        data, label = self.df.loc[idx]
+        return data, label
+
+    def get_distinct_labels(self):
+        return ["bacillus_anthracis", "ecoli", "pseudomonas_koreensis"]
+
+
+class StatsTestDataset(Dataset):
+
+    def __init__(self):
+        n_classes = 1
+        n_points = 50
+        self.chunk = 2
+        self.startVector = [SOS_MEAN]
+
+        print("HERE")
+        l = 10
+        r = 20
+
+        self.data = []
+        for i in range(n_points):
+            test_sample = []
+            x_len = 10
+            x = uniform(-5,5)
+            data = [x + 0.1 * j for j in range(1, x_len)]
+            stats_data = self.generateStatsData(data)
+            self.data.append((stats_data, 1))
+        
+        #print(self.data)
+        self.n = len(self.data)
+        return
+
+        self.data = []
+        for i in range(n_points):
+            test_sample = []
+            x_len = randint(l, r)
+            x = uniform(-5,5)
+            data = [x + 0.1 * i for i in range(1, x_len)]
+            stats_data = self.generateStatsData(data)
+            self.data.append((stats_data, 1))
+
+        '''for i in range(n_points):
+            test_sample = []
+            x = uniform(-5,5)
+            x_len = randint(l, r)
+            data = [i * x for i in range(1, x_len)]
+            stats_data = self.generateStatsData(data)
+            self.data.append((stats_data, 2))  
+     
+        for i in range(n_points):
+            test_sample = []
+            x = uniform(-5,5)
+            x_len = randint(l, r)
+            data = [x + 2 * i for i in range(1, x_len)]
+            stats_data = self.generateStatsData(data)
+            self.data.append((stats_data, 3)) 
+
+        for i in range(n_points):
+            test_sample = []
+            
+            x = uniform(-5,5)
+            x_len = randint(l, r)
+            data = [x-i for i in range(1, x_len)] 
+            print(data[:10])
+            stats_data = self.generateStatsData(data)
+            self.data.append((stats_data, 4))
+        '''
+        self.n = n_classes * n_points
+
+    def generateStatsData(self, data):
+        stats_data = []
+        for i in range(len(data)//self.chunk+1):
+                data_chunk = data[i*self.chunk : (i+1)*self.chunk]
+                
+                if len(data_chunk) == 0:
+                    continue
+                
+                if len(data_chunk) == 1:
+                    stats_data.append([data_chunk[0], 0])
+                    continue
+
+                data_mean, data_median, data_stdev, en, data_iqr = mean(data_chunk), median(data_chunk),  stdev(data_chunk), entropy(data_chunk), iqr(data_chunk)
+                stats_data.append([data_mean, data_stdev])
+        return stats_data
+
+    def __len__(self):
+        return self.n
+
+    def __getitem__(self, idx):
+        data, label = self.data[idx]
+        return data, label
+
+    def get_distinct_labels(self):
+        return [1,2,3,4]
+
+    def get_vector_len(self):
+        return len(self.startVector)
+
+
+class TestDataset(Dataset):
+
+    def __init__(self):
+        n_classes = 4
+        n_points = 30
+
+        self.data = []
+        for i in range(n_points):
+            test_sample = []
+            x_len = 5
+            x = uniform(-1,1)
+            data = [x + 0.1 * j for j in range(1, x_len)]
+            self.data.append((data, 1))
+        print(self.data)
+        self.n = len(self.data)
+        return
+
+        self.data = []
+        for i in range(n_points):
+            test_sample = []
+            x = uniform(-1,1)
+            x_len = randint(100, 150)
+            #self.data.append(([min(max(x+0.1*i, -1),1) for i in range(x_len)], 1))
+            #self.data.append(([0.2 for i in range(x_len)], 1))
+            self.data.append(([0.1* x*x+0.05*i for i in range(x_len)],1))
+
+        for i in range(n_points):
+            test_sample = []
+            x = uniform(-5,5)
+            x_len = randint(100, 150)
+            #self.data.append(([min(max(x-0.2*i, -1), 1) for i in range(x_len)], 2))
+            #self.data.append(([0.7 for i in range(x_len)], 2))
+            self.data.append(([x-0.08*i for i in range(x_len)],2))    
+     
+        for i in range(n_points):
+            test_sample = []
+            x = uniform(-5,5)
+            x_len = randint(100, 150)
+            #self.data.append(([min(max(2*x - 0.5*i, -1), 1) for i in range(x_len)], 3))
+            #self.data.append(([-0.3 for i in range(x_len)], 3))
+            self.data.append(([2*x+0.1*i for i in range(x_len)],3))   
+
+        for i in range(n_points):
+            test_sample = []
+            x = uniform(-5,5)
+            x_len = randint(100, 150)
+            #self.data.append(([min(max(-x + 0.3*i, -1), 1) for i in range(x_len)], 4))
+            #self.data.append(([-0.5 for i in range(x_len)], 4))
+            self.data.append(([-2*x*x+0.25*i for i in range(x_len)],4))   
+
+        self.n = n_classes * n_points
+
+    def __len__(self):
+        return self.n
+
+    def __getitem__(self, idx):
+        data, label = self.data[idx]
+       # copy.insert(0,10)
+        #data = minmax_scale(data)
+
+        #if idx == 0:
+        #    data = [0,0.1,0.2,0.3,0.4,0.5]
+        #else:
+        #    data = [0, -0.1, -0.2, -0.3, -0.4, -0.5]
+        #return data, label
+        return data, label
+
+    def get_distinct_labels(self):
+        return [1,2,3,4]
+
 
 class TripletTestDataset(Dataset):
     def __init__(self):
@@ -115,175 +394,7 @@ class TripletTestDataset(Dataset):
 
     def get_distinct_labels(self):
         return [1,2, 3]
-        
-class StatsDataset(Dataset):
 
-    def __init__(self, reference_csv, raw = True):
-        self.reference = pd.read_csv(reference_csv, delimiter = ",", header = None)
-        self.startVector = [SOS_MEAN, SOS_STDEV, SOS_IQR, SOS_EN, SOS_MEDIAN]
-
-        self.df = pd.DataFrame(columns = ["data", "label"])
-
-        for i in range(1, len(self.reference)):
-            index, label, data = self.reference.loc[i]
-            data = [[float(mean), float(stdev), float(iqr), float(entropy), float(med)] for mean, gmean,  med, stdev, entropy, iqr in [line.split(",") for line in data.split("$")]]
-            
-            #means = minmax_scale(self.column(data, 0))
-            #stdevs = minmax_scale(self.column(data, 1))
-            #entropies = minmax_scale(self.column(data, 2))
-
-            #data = np.column_stack((means, stdevs))
-            #data = np.insert(data, 0, self.startVector, axis = 0)
-            self.df = self.df.append({"data" : data, "label" : label}, ignore_index = True)
-
-
-        self.n = len(self.df)
-
-    def column(self, matrix, i):
-        return [row[i] for row in matrix]
-
-    def __len__(self):
-        return self.n
-
-    def __getitem__(self, idx):
-        data, label = self.df.loc[idx]
-        return torch.FloatTensor(data), label
-
-    def get_distinct_labels(self):
-        return ["bacillus_anthracis", "ecoli", "pseudomonas_koreensis"]
-
-    def get_vector_len(self):
-        return len(self.startVector)
-
-class StatsTestDataset(Dataset):
-
-    def __init__(self):
-        n_classes = 4
-        n_points = 50
-        self.chunk = 100
-        self.startVector = [SOS_MEAN, SOS_STDEV]
-
-        l = 30000
-        r = 40000
-
-        self.data = []
-        for i in range(n_points):
-            test_sample = []
-            x_len = randint(l, r)
-            data = [sin(-x*x+0.02) for x in range(300, 600)]
-            stats_data = self.generateStatsData(data)
-            self.data.append((stats_data, 1))
-
-        for i in range(n_points):
-            test_sample = []
-            x = uniform(-0.2,0.2)
-            x_len = randint(l, r)
-            data = [x * exp(x) for x in range(300, 600)]
-            stats_data = self.generateStatsData(data)
-            self.data.append((stats_data, 2))  
-     
-        for i in range(n_points):
-            test_sample = []
-            x = uniform(-0.2,0.2)
-            x_len = randint(l, r)
-            data = [x * x *tan(2*x+0.1) for x in range(300, 600)]
-            stats_data = self.generateStatsData(data)
-            self.data.append((stats_data, 3)) 
-
-        for i in range(n_points):
-            test_sample = []
-            x = uniform(-0.2,0.2)
-            x_len = randint(l, r)
-            data = [cos(-2*sqrt(x)+0.25) for x in range(300, 600)] 
-            stats_data = self.generateStatsData(data)
-            self.data.append((stats_data, 4))
-
-        self.n = n_classes * n_points
-
-    def generateStatsData(self, data):
-        data = minmax_scale(data, feature_range = (0,1)) 
-        stats_data = []
-        for i in range(len(data)//self.chunk+1):
-                data_chunk = data[i*self.chunk : (i+1)*self.chunk]
-                if len(data_chunk) < 2:
-                    continue
-                
-                if len(data_chunk) == 1:
-                    stats_data.append([data_chunk[0], data_chunk[0], 0])
-                    continue
-
-                data_mean, data_median, data_stdev, en = mean(data_chunk), median(data_chunk),  stdev(data_chunk), entropy(data_chunk)
-                stats_data.append([data_mean, data_stdev])
-        return stats_data
-
-    def __len__(self):
-        return self.n
-
-    def __getitem__(self, idx):
-        data, label = self.data[idx]
-        copy = data.copy()
-        copy.insert(0, self.startVector)
-        return torch.FloatTensor(copy), label
-
-    def get_distinct_labels(self):
-        return [1,2,3,4]
-
-    def get_vector_len(self):
-        return len(self.startVector)
-
-
-class TestDataset(Dataset):
-
-    def __init__(self):
-        n_classes = 4
-        n_points = 50
-
-        self.data = []
-        for i in range(n_points):
-            test_sample = []
-            x = uniform(-0.2,0.2)
-            x_len = randint(15, 20)
-            #self.data.append(([min(max(x+0.1*i, -1),1) for i in range(x_len)], 1))
-            #self.data.append(([0.2 for i in range(x_len)], 1))
-            self.data.append(([sin(0.1* x*x+0.05*i) for i in range(x_len)],1))
-
-        for i in range(n_points):
-            test_sample = []
-            x = uniform(-0.2,0.2)
-            x_len = randint(15, 20)
-            #self.data.append(([min(max(x-0.2*i, -1), 1) for i in range(x_len)], 2))
-            #self.data.append(([0.7 for i in range(x_len)], 2))
-            self.data.append(([cos(x-0.08*i) for i in range(x_len)],2))    
-     
-        for i in range(n_points):
-            test_sample = []
-            x = uniform(-0.2,0.2)
-            x_len = randint(15, 20)
-            #self.data.append(([min(max(2*x - 0.5*i, -1), 1) for i in range(x_len)], 3))
-            #self.data.append(([-0.3 for i in range(x_len)], 3))
-            self.data.append(([sin(2*x+0.1*i) for i in range(x_len)],3))   
-
-        for i in range(n_points):
-            test_sample = []
-            x = uniform(-0.2,0.2)
-            x_len = randint(15, 20)
-            #self.data.append(([min(max(-x + 0.3*i, -1), 1) for i in range(x_len)], 4))
-            #self.data.append(([-0.5 for i in range(x_len)], 4))
-            self.data.append(([cos(-2*x*x+0.25*i) for i in range(x_len)],4))   
-
-        self.n = n_classes * n_points
-
-    def __len__(self):
-        return self.n
-
-    def __getitem__(self, idx):
-        data, label = self.data[idx]
-        copy = data.copy()
-        copy.insert(0, SOS_token)
-        return torch.FloatTensor([[i] for i in copy]), label
-
-    def get_distinct_labels(self):
-        return [1,2,3,4]
 
 class SignalTripletDataset(Dataset):
 
@@ -308,7 +419,7 @@ class SignalTripletDataset(Dataset):
         return torch.FloatTensor([[i] for i in data_a]), torch.FloatTensor([[i] for i in data_p]), torch.FloatTensor([[i] for i in data_n]), label
 
     def get_distinct_labels(self):
-        return ["bacillus_anthracis", "ecoli"]#, "klebsiella_pneumoniae", "pantonea_agglomerans", "pseudomonas_koreensis", "yersinia_pestis"]
+        return ["bacillus_anthracis", "ecoli", ""]#, "klebsiella_pneumoniae", "pantonea_agglomerans", "pseudomonas_koreensis", "yersinia_pestis"]
 
 class SignalDataset(Dataset):
 

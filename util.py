@@ -42,14 +42,15 @@ def showPlotFromFile(filename = "data.txt"):
 
 
 def showPlot(train, validation = None, filename = "figures/loss.png"):
-    plt.plot(train)
+
     if validation:
         plt.plot(validation)
 
+    plt.plot(train)
     plt.title('model loss')
     plt.ylabel('loss')
     plt.xlabel('epoch')
-    plt.legend(['train','validation'], loc='upper left')
+    plt.legend(['validation','train'], loc='upper left')
 
     plt.savefig(filename)
     plt.close()
@@ -98,7 +99,7 @@ def scatter(x, labels, distinct_labels, name, subtitle=None):
     ax.axis('tight')
     
     txts = []
-    '''
+    
     for label in distinct_labels:
         xtext, ytext = np.median(x[labels == label, :], axis=0)
         txt = ax.text(xtext, ytext, label, fontsize=24)
@@ -106,7 +107,7 @@ def scatter(x, labels, distinct_labels, name, subtitle=None):
             PathEffects.Stroke(linewidth=5, foreground="w"),
             PathEffects.Normal()])
         txts.append(txt)
-    '''
+    
         
     if subtitle != None:
         plt.suptitle(subtitle)

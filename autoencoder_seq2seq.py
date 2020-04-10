@@ -15,7 +15,7 @@ import numpy as np
 
 from util import asMinutes, timeSince, showPlot, timeNow, knn, visualize, showPlotFromFile
 from Model import AutoEncoder
-from SignalDataset import Signal, SignalDataset, TestDataset, StatsTestDataset, StatsDataset
+from SignalDataset import Signal, SignalDataset, TestDataset, StatsTestDataset, StatsDataset, StatsSubsetDataset
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -24,27 +24,22 @@ torch.cuda.manual_seed(1)
 
 def collate(input):
     in_batch, labels = map(list, zip(*input))
-    #in_batch = [item for sublist in in_batch for item in sublist]
-    #labels = [item for sublist in labels for item in sublist]
-    #print(in_batch)
     padded = pad_sequence(in_batch, batch_first = True, padding_value = 0)
     lens = [len(x) for x in in_batch]
     max_len = max(lens)
-    #out = pack_padded_sequence(padded, lens, batch_first = True, enforce_sorted = False)
-    
     return padded, padded, labels, max_len, torch.IntTensor(lens)
-    #return out, padded, labels, max_len, lens
   
  
-def train(train_dataset, validation_dataset, vector_size = 1, iterations = 10000, hidden_size = 256, batch_size = 50):
+def train(train_dataset, validation_dataset, vector_size = 1, iterations = 20000, hidden_size = 100, batch_size = 16):
     print("Training...")
     print("Start time (2 hours behind)...", time.strftime("%H:%M:%S", time.localtime()))
     start_time = time.time()
     train = DataLoader(train_dataset, batch_size = batch_size, shuffle = True, pin_memory = True, collate_fn = collate)
-    validation = DataLoader(validation_dataset, batch_size = batch_size, shuffle = True, pin_memory = True, collate_fn = collate)
+    if(validation_dataset):
+        validation = DataLoader(validation_dataset, batch_size = batch_size, shuffle = True, pin_memory = True, collate_fn = collate)
     f =  open('data.txt', 'w')
 
-    model = AutoEncoder(vector_size, hidden_size, vector_size, n_layers = 1 )
+    model = AutoEncoder(vector_size, hidden_size, vector_size, n_layers = 1, dropout = 0.1)
     if torch.cuda.device_count() > 1:
         print("Using", torch.cuda.device_count(), "GPUs!")
         model = nn.DataParallel(model)
@@ -60,35 +55,35 @@ def train(train_dataset, validation_dataset, vector_size = 1, iterations = 10000
         model.train()
         
         loss_acc = 0
-        I = 0
         for input_tensor, target_tensor, _, max_len, lens in train:
             input_tensor = input_tensor.to(device, non_blocking = True)
             target_tensor = target_tensor.to(device, non_blocking = True)
+            optimizer.zero_grad()
 
             outputs = model(input_tensor, target_tensor, max_len, lens)
             
-            model.zero_grad()
             batch_loss = criterion(outputs[:,1:].squeeze(), target_tensor[:,1:].squeeze())
-            batch_loss.backward(retain_graph = True)
+            batch_loss.backward()
             loss_acc += batch_loss.item()
-         
             optimizer.step()
+        
         
         train_losses.append(loss_acc/len(train))
 
-        with torch.no_grad():
-            val_loss_acc = 0
-            for input_tensor, target_tensor, _, max_len, lens in validation:
-                model.eval()
-                input_tensor = input_tensor.to(device, non_blocking = True)
-                target_tensor = target_tensor.to(device, non_blocking = True)
+        if(validation_dataset):
+            with torch.no_grad():
+                val_loss_acc = 0
+                for input_tensor, target_tensor, _, max_len, lens in validation:
+                    model.eval()
+                    input_tensor = input_tensor.to(device, non_blocking = True)
+                    target_tensor = target_tensor.to(device, non_blocking = True)
 
-                outputs = model(input_tensor, target_tensor, max_len, lens)
+                    outputs = model(input_tensor, target_tensor, max_len, lens)
 
-                val_loss = criterion(outputs[:,1:].squeeze(), target_tensor[:,1:].squeeze())
-                val_loss_acc += val_loss.item()
+                    val_loss = criterion(outputs[:,1:].squeeze(), target_tensor[:,1:].squeeze())
+                    val_loss_acc += val_loss.item()
         
-            validation_losses.append(val_loss_acc/len(validation)) 
+                validation_losses.append(val_loss_acc/len(validation)) 
 
         f.write(str(loss_acc/len(train)) +  "," + str(val_loss_acc/len(validation)) + "\n")
     
@@ -98,13 +93,11 @@ def train(train_dataset, validation_dataset, vector_size = 1, iterations = 10000
             " Validation loss: ", "{0:.5f}".format(validation_losses[-1])
             )
 
-        if iter%5 == 0:
+        if iter%50 == 0:
             torch.save(model, "models/autoencoder.pt")
             showPlot(train_losses, validation_losses)
 
-        #if loss_acc/len(train) < 0.01 and validation_losses[-1] < 0.5 or validation_losses[-1] < 0.35:
-        #    print(iter)
-        #    break
+
         
     f.close()
     showPlot(train_losses, validation_losses)
@@ -199,21 +192,32 @@ if __name__ == '__main__':
         vec_size = dataset.get_vector_len()
     elif (args.stats):
         dataset = StatsDataset("csv/perfect-stats.csv")
-        vec_size = dataset.get_vector_len()
     else:
         dataset = SignalDataset("../Signals/full_dataset/", "csv/dataset-twoclasses.csv", raw = True)
         print("Using real data")
     
-    train_size = int(0.8 * len(dataset)) +1
-    val_test_size = (len(dataset) - train_size) // 2
+    print(len(dataset))
+    train_size = int(0.8 * len(dataset)) + (0 if (len(dataset)%2 == 0) else 1)
+    val_test_size = (len(dataset) - train_size) // 2 
+    print(train_size, val_test_size)
     print(train_size, val_test_size, train_size + val_test_size * 2, len(dataset))
     print("Dataset length: ", str(train_size) + " train, " + str(val_test_size) + " test!")
     train_dataset, validation_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size,  val_test_size, val_test_size])  
- 
+
+   # train_dataset = dataset 
+    #validation_dataset = None
+    #test_dataset = dataset
+
+    if(args.stats or args.teststats or args.testdata ):
+        train_dataset = StatsSubsetDataset(train_dataset)
+        validation_dataset = StatsSubsetDataset(validation_dataset)
+        test_dataset = StatsSubsetDataset(test_dataset)
+        vec_size = train_dataset.get_vector_len()
+
     if (args.train):
         train(train_dataset, validation_dataset, vector_size = vec_size)
 
-    showPlotFromFile("data.txt")
+    #showPlotFromFile("data.txt")
 
     print("Starting evaluation phase")
     dataloader = DataLoader(train_dataset, batch_size = 1, shuffle = True, pin_memory = True, collate_fn = collate)
@@ -224,7 +228,7 @@ if __name__ == '__main__':
     print("Evaluating train")
     evaluate(train_dataloader, True)
     print("Evaluating test")
-    evaluate(test_dataloader, True)
+    #evaluate(test_dataloader, True)
    
 
     X, y = get_latent(dataloader, model)

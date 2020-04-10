@@ -20,7 +20,7 @@ def constructDatasetCSV(root_dir, dataset_name):
         file_writer.writerow(("file", "label"))
         for sub_dir in listdir(root_dir):
             label = sub_dir
-            if (not (label == "bacillus_anthracis" or label == "ecoli" or label == "pseudomonas_koreensis")):
+            if (not (label == "pantonea_agglomerans" or label == "pseudomonas_koreensis" or label == "bacillus_anthracis" or label == "ecoli" or label == "yersinia_pestis")):
                 continue
             
             target_dir = join(root_dir, sub_dir)
@@ -45,7 +45,6 @@ def constructRawSignalValuesCSV(dataset_csv,  name = 'raw_dataset.csv'):
         f = h5py.File(filename, 'r')
         data = np.array(f["Raw"]["Reads"]["Read_981"]["Signal"]).astype(np.float)
         data = minmax_scale(data, feature_range = (0,1))
-        #data = normalize([data])[0]
 
         for i in range(len(data)//read_len + 1):
             data_chunk = data[i*read_len : (i+1)*read_len]
@@ -106,7 +105,7 @@ def constructTripletDatasetCSV(root_dir, name):
         data = collections.defaultdict(list)
         for sub_dir in listdir(root_dir):
             label = sub_dir.replace("_reference_DeepSimu", "")
-            if (not (label == "bacillus_anthracis" or label == "ecoli")):
+            if (not (label == "ecoli" or label == "bacillus_anthracis")):
                 continue
         
             count = 0
@@ -115,7 +114,7 @@ def constructTripletDatasetCSV(root_dir, name):
                 data[label].append(join(target_dir, filename))
         
         for label, files in data.items():
-            for i in range(200):
+            for i in range(100):
                 anchor = random.choice(files)
                 positive = random.choice(files)
 
