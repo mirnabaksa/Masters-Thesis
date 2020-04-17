@@ -20,8 +20,8 @@ def constructDatasetCSV(root_dir, dataset_name):
         file_writer.writerow(("file", "label"))
         for sub_dir in listdir(root_dir):
             label = sub_dir
-            if (not (label == "pantonea_agglomerans" or label == "pseudomonas_koreensis" or label == "bacillus_anthracis" or label == "ecoli" or label == "yersinia_pestis")):
-                continue
+            #if (not (  label == "bacillus_anthracis" or label == "ecoli" or label == "yersinia_pestis" or label == "pseudomonas_koreensis")):
+            #    continue
             
             target_dir = join(root_dir, sub_dir)
             for filename in listdir(target_dir):
@@ -46,7 +46,7 @@ def constructRawSignalValuesCSV(dataset_csv,  name = 'raw_dataset.csv'):
         data = np.array(f["Raw"]["Reads"]["Read_981"]["Signal"]).astype(np.float)
         data = minmax_scale(data, feature_range = (0,1))
 
-        for i in range(len(data)//read_len + 1):
+        for i in range(len(data)//read_len):
             data_chunk = data[i*read_len : (i+1)*read_len]
             data_str =  ','.join([str(num) for num in data_chunk])
             df = df.append({'raw_data' : data_str, 'label' : label}, ignore_index = True)
@@ -57,7 +57,7 @@ def constructRawSignalValuesCSV(dataset_csv,  name = 'raw_dataset.csv'):
 
 from sklearn.preprocessing import minmax_scale, normalize
 
-def constructStatsDataset(source = "raw_dataset.csv", dest = "stats_dataset.csv", chunk = 200):
+def constructStatsDataset(source = "raw_dataset.csv", dest = "stats_dataset.csv", chunk = 400):
     df_raw = pd.read_csv('csv/' + source)  
     column_names = ["label","stats_data"]
     df = pd.DataFrame(columns=column_names)
@@ -72,7 +72,7 @@ def constructStatsDataset(source = "raw_dataset.csv", dest = "stats_dataset.csv"
         
         stats_data = []
         means = []
-        for i in range(len(splitted)//chunk+1):
+        for i in range(len(splitted)//chunk):
             data_chunk = splitted[i*chunk : (i+1)*chunk]
             if len(data_chunk) < 2:
                 continue
@@ -95,7 +95,7 @@ def constructStatsDataset(source = "raw_dataset.csv", dest = "stats_dataset.csv"
     df.to_csv('csv/' + dest)
     print("csv/" + dest + " created!")
 
-
+'''
 import random       
 import collections
 def constructTripletDatasetCSV(root_dir, name):
@@ -105,7 +105,7 @@ def constructTripletDatasetCSV(root_dir, name):
         data = collections.defaultdict(list)
         for sub_dir in listdir(root_dir):
             label = sub_dir.replace("_reference_DeepSimu", "")
-            if (not (label == "ecoli" or label == "bacillus_anthracis")):
+            if (not (label == "ecoli" or label == "bacillus_anthracis" or label == "pseudomonas_koreensis")):
                 continue
         
             count = 0
@@ -123,9 +123,10 @@ def constructTripletDatasetCSV(root_dir, name):
                         continue
                     negative = random.choice(negative_files)
                     file_writer.writerow((anchor, positive, negative, label))
+'''
 
 
 if __name__ == '__main__':
-    constructDatasetCSV("../Signals/perfect/", dataset_name = "dataset-perfect-twoclass.csv")
-    constructRawSignalValuesCSV('dataset-perfect-twoclass.csv', 'perfect-raw-twoclass.csv')
-    constructStatsDataset(source = 'perfect-raw-twoclass.csv', dest = 'perfect-stats.csv')
+    constructDatasetCSV("../Signals/perfect/", dataset_name = "dataset-perfect4.csv")
+    constructRawSignalValuesCSV('dataset-perfect4.csv', 'perfect-raw4.csv')
+    constructStatsDataset(source = 'perfect-raw4.csv', dest = 'perfect-stats.csv')

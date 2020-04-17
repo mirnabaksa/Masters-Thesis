@@ -13,7 +13,7 @@ from scipy.stats import mode, hmean, gmean, entropy, iqr
 import random
 from random import uniform, randint, choice
 
-from sklearn.preprocessing import StandardScaler, minmax_scale
+from sklearn.preprocessing import StandardScaler, minmax_scale, normalize
 from sklearn import preprocessing
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -35,14 +35,25 @@ class TripletStatsDataset(Dataset):
 
         self.data = pd.DataFrame(columns = ["anchor", "positive", "negative", "label"])
 
+        num_samples = 3
         for stats, label in self.flat_data.values.tolist():
             for other_label in self.get_distinct_labels():
                 if label == other_label:
                     continue
+              
+                pos =  self.flat_data.loc[self.flat_data['label'] == label]
+                neg = self.flat_data.loc[self.flat_data['label'] == other_label]
+
+                if pos.empty or neg.empty:
+                    continue
                     
-                positive, labp = self.flat_data.loc[self.flat_data['label'] == label].sample().values[0]
-                negative, labn = self.flat_data.loc[self.flat_data['label'] == other_label].sample().values[0]
-                self.data = self.data.append({"anchor" : stats, "positive" : positive, "negative" : negative, "label" : label}, ignore_index = True)
+                pos = pos.sample(num_samples)
+                neg = neg.sample(num_samples)
+
+                for i in range(num_samples):
+                    positive, labp = pos.values[i]
+                    negative, labn = neg.values[i]
+                    self.data = self.data.append({"anchor" : stats, "positive" : positive, "negative" : negative, "label" : label}, ignore_index = True)
            
         self.n = len(self.data)
         print("Effective length: ", self.n)
@@ -55,18 +66,18 @@ class TripletStatsDataset(Dataset):
         return self.n
 
     def get_distinct_labels(self):
-        return ["bacillus_anthracis", "pseudomonas_koreensis", "ecoli", "yersinia_pestis", "pantonea_agglomerans"]
+        return ["bacillus_anthracis", "ecoli", "pseudomonas_koreensis", "yersinia_pestis", "pantonea_agglomerans", "klebsiella_pneumoniae"]
 
 
 class StatsSubsetDataset(Dataset):
 
-    def __init__(self, subset, wrapped = False):
+    def __init__(self, subset, wrapped = False, seq2seq = False, minmax = False):
         self.subset = subset
         self.n = len(subset)
         self.n_stats = len(subset[0][0][0])
+        self.seq2seq = seq2seq
         self.wrapped = wrapped
         
-        self.startVector = [10, 11, 12, 13, 14]
         cols = [[] for j in range(self.n_stats)]
 
         for point in self.subset:
@@ -76,9 +87,13 @@ class StatsSubsetDataset(Dataset):
                 cols[col].extend(column)
         
         col_stats = []
-        for col in cols:
-            col_mean, stdev_mean = mean(col), stdev(col)
-            col_stats.append((col_mean, stdev_mean))
+        for col in cols:  
+            if minmax:
+                col_min, col_max = min(col), max(col)
+                col_stats.append((col_min, col_max))
+            else:
+                col_mean, stdev_mean = mean(col), stdev(col)
+                col_stats.append((col_mean, stdev_mean))
         
         self.df = pd.DataFrame(columns = ["data", "label"])
         for point in self.subset:
@@ -87,12 +102,16 @@ class StatsSubsetDataset(Dataset):
             for row in matrix:
                 data_row = []
                 for i in range(len(row)):
-                    col_mean, col_stdev = col_stats[i]
-                    data_row.append((row[i] - col_mean) / col_stdev)
+                    if minmax:
+                        col_min, col_max = col_stats[i]
+                        data_row.append((row[i] - col_min)/(col_max - col_min))
+                    
+                    else:
+                        col_mean, col_stdev = col_stats[i]
+                        data_row.append((row[i] - col_mean) / col_stdev)
                 
                 data.append(data_row)
-            if (not self.wrapped):
-                data.insert(0, self.startVector)
+
             self.df = self.df.append({"data" : data, "label" : label}, ignore_index = True)
      
 
@@ -109,10 +128,10 @@ class StatsSubsetDataset(Dataset):
         return torch.FloatTensor(data), label
 
     def get_distinct_labels(self):
-        return ["bacillus_anthracis", "ecoli", "pseudomonas_koreensis", "yersinia_pestis", "pantonea_agglomerans"]
+        return ["bacillus_anthracis", "ecoli", "pseudomonas_koreensis", "yersinia_pestis", "pantonea_agglomerans", "klebsiella_pneumoniae"]
     
     def get_vector_len(self):
-        return len(self.startVector)
+        return self.n_stats
 
 
 
@@ -124,7 +143,7 @@ class StatsDataset(Dataset):
 
         for i in range(1, len(self.reference)):
             index, label, data = self.reference.loc[i]
-            data = [[float(mean), float(stdev), float(iqr), float(entropy), float(med)] for mean, gmean,  med, stdev, entropy, iqr in [line.split(",") for line in data.split("$")]]
+            data = [[float(mean), float(stdev), float(iqr)] for mean, gmean,  med, stdev, entropy, iqr in [line.split(",") for line in data.split("$")]]
             self.df = self.df.append({"data" : data, "label" : label}, ignore_index = True)
         self.n = len(self.df)
 
@@ -136,62 +155,71 @@ class StatsDataset(Dataset):
 
     def __getitem__(self, idx):
         data, label = self.df.loc[idx]
+       # print(torch.FloatTensor(data))
         return data, label
 
     def get_distinct_labels(self):
-        return ["bacillus_anthracis", "ecoli", "pseudomonas_koreensis"]
+        return ["bacillus_anthracis", "ecoli", "pseudomonas_koreensis", "pantonea_agglomerans", "yersinia_pestis", "klebsiella_pneumoniae"]
 
 
 class StatsTestDataset(Dataset):
 
     def __init__(self):
-        n_classes = 1
-        n_points = 50
+        n_classes = 2
+        n_points = 30
         self.chunk = 2
-        self.startVector = [SOS_MEAN]
+        self.startVector = [SOS_MEAN, SOS_STDEV]
 
-        print("HERE")
         l = 10
         r = 20
 
+        #self.data = [([0.1,0.2,0.3,0.4,0.5],1),([-0.1,-0.2,-0.3,-0.4,-0.5],2)]
+        #self.n = 2
+        #return
         self.data = []
         for i in range(n_points):
-            test_sample = []
-            x_len = 10
-            x = uniform(-5,5)
-            data = [x + 0.1 * j for j in range(1, x_len)]
-            stats_data = self.generateStatsData(data)
+            x_len = 20
+            x = uniform(2,5)
+            data = [sin(i+x) for i in range(x_len)]
+            data = normalize([data])[0]
+
+            #stats_data = self.generateStatsData(data)
+            stats_data = data
             self.data.append((stats_data, 1))
+    
+        for i in range(n_points):
+            x_len = 20
+            x = uniform(2,5)
+            data = [cos(i+x) for i in range(x_len)]
+            data = normalize([data])[0]
+            #stats_data = self.generateStatsData(data)
+            stats_data = data
+            self.data.append((stats_data, 2))
         
-        #print(self.data)
         self.n = len(self.data)
-        return
-
-        self.data = []
+        #print(self.data)
+        #exit(0)
+        '''
         for i in range(n_points):
             test_sample = []
-            x_len = randint(l, r)
-            x = uniform(-5,5)
-            data = [x + 0.1 * i for i in range(1, x_len)]
-            stats_data = self.generateStatsData(data)
-            self.data.append((stats_data, 1))
-
-        '''for i in range(n_points):
-            test_sample = []
             x = uniform(-5,5)
             x_len = randint(l, r)
-            data = [i * x for i in range(1, x_len)]
+            x_len = 50
+            data = [sin(i-x) for i in range(1, x_len)]
             stats_data = self.generateStatsData(data)
-            self.data.append((stats_data, 2))  
+            self.data.append((stats_data, 3))  
      
         for i in range(n_points):
             test_sample = []
             x = uniform(-5,5)
             x_len = randint(l, r)
-            data = [x + 2 * i for i in range(1, x_len)]
+            x_len = 50
+            data = [cos(i-x) for i in range(1, x_len)]
             stats_data = self.generateStatsData(data)
-            self.data.append((stats_data, 3)) 
-
+            self.data.append((stats_data, 4)) 
+        '''
+        self.n = len(self.data)
+        '''
         for i in range(n_points):
             test_sample = []
             
@@ -202,10 +230,11 @@ class StatsTestDataset(Dataset):
             stats_data = self.generateStatsData(data)
             self.data.append((stats_data, 4))
         '''
-        self.n = n_classes * n_points
 
     def generateStatsData(self, data):
         stats_data = []
+        means = []
+        devs = []
         for i in range(len(data)//self.chunk+1):
                 data_chunk = data[i*self.chunk : (i+1)*self.chunk]
                 
@@ -217,15 +246,18 @@ class StatsTestDataset(Dataset):
                     continue
 
                 data_mean, data_median, data_stdev, en, data_iqr = mean(data_chunk), median(data_chunk),  stdev(data_chunk), entropy(data_chunk), iqr(data_chunk)
-                stats_data.append([data_mean, data_stdev])
-        return stats_data
+                means.append(data_mean)
+                devs.append(data_stdev)
+                #stats_data.append([data_mean, data_stdev])
+        return [means, devs]
 
     def __len__(self):
+        #return 1
         return self.n
 
     def __getitem__(self, idx):
         data, label = self.data[idx]
-        return data, label
+        return torch.FloatTensor(data), label
 
     def get_distinct_labels(self):
         return [1,2,3,4]
@@ -240,14 +272,31 @@ class TestDataset(Dataset):
         n_classes = 4
         n_points = 30
 
+        #self.data = [([0.1,0.2,0.3,0.4,0.5],1) , ([-0.1,-0.2,-0.3,-0.4,-0.5],2)]
+        #self.n = 2
+        #return
         self.data = []
         for i in range(n_points):
             test_sample = []
-            x_len = 5
-            x = uniform(-1,1)
-            data = [x + 0.1 * j for j in range(1, x_len)]
+            x_len = 50
+            x = uniform(0,0.5)
+            data = [sin(exp(x*j)+sqrt(j)) for j in np.arange(0, 1, 0.2)]
             self.data.append((data, 1))
-        print(self.data)
+
+        for i in range(n_points):
+            test_sample = []
+            x_len = 50
+            x = uniform(0.5,1)
+            data = [cos(sqrt(x)*j) for j in np.arange(0, 1, 0.2)]
+            self.data.append((data, 2))
+
+        for i in range(n_points):
+            test_sample = []
+            x_len = 50
+            x = uniform(0.5,1)
+            data = [tan(j) for j in np.arange(0, 1, 0.2)]
+            self.data.append((data, 3))
+    
         self.n = len(self.data)
         return
 
@@ -291,15 +340,7 @@ class TestDataset(Dataset):
 
     def __getitem__(self, idx):
         data, label = self.data[idx]
-       # copy.insert(0,10)
-        #data = minmax_scale(data)
-
-        #if idx == 0:
-        #    data = [0,0.1,0.2,0.3,0.4,0.5]
-        #else:
-        #    data = [0, -0.1, -0.2, -0.3, -0.4, -0.5]
-        #return data, label
-        return data, label
+        return torch.FloatTensor(data), label
 
     def get_distinct_labels(self):
         return [1,2,3,4]
@@ -308,15 +349,16 @@ class TestDataset(Dataset):
 class TripletTestDataset(Dataset):
     def __init__(self):
         n_classes = 3
-        n_points = 50
+        n_points = 40
 
         self.positive = []
         self.negative = []
+        x_len = 10
         for i in range(n_points):
             test_sample = []
             x = uniform(-0.5,0.5)
             #x_len = 4
-            x_len = randint(30, 60)
+            #x_len = randint(30, 60)
             #self.data.append(([min(max(x+0.1*i, -1),1) for i in range(x_len)], 1))
             self.positive.append(([sin(0.1* x+0.05*i) for i in range(x_len)], "positive"))
 
@@ -324,7 +366,7 @@ class TripletTestDataset(Dataset):
             test_sample = []
             x = uniform(-0.5,0.5)
             #x_len = 4
-            x_len = randint(30, 60)
+            #x_len = randint(30, 60)
             #self.data.append(([min(max(x-0.2*i, -1), 1) for i in range(x_len)], 2))
             self.negative.append(([cos(x-0.08*i) for i in range(x_len)], "negative"))
 
@@ -333,46 +375,46 @@ class TripletTestDataset(Dataset):
             test_sample = []
             x = uniform(-0.5,0.5)
             #x_len = 4
-            x_len = randint(30, 60)
+            #x_len = randint(30, 60)
             #self.data.append(([min(max(x-0.2*i, -1), 1) for i in range(x_len)], 2))
-            self.neutral.append(([sin(2*x+0.1*i) for i in range(x_len)], "neutral"))
+            self.neutral.append(([tan(2*x+0.1*i) for i in range(x_len)], "neutral"))
 
 
         self.triplets = []
         for i in range(n_points//2):
-            a = self.positive[randint(0,49)]
-            p = self.positive[randint(0,49)]
-            n = self.negative[randint(0,49)]
+            a = self.positive[randint(0,n_points-1)]
+            p = self.positive[randint(0,n_points-1)]
+            n = self.negative[randint(0,n_points-1)]
             self.triplets.append((a,p,n, 1))
 
         for i in range(n_points//2):
-            a = self.positive[randint(0,49)]
-            p = self.positive[randint(0,49)]
-            n = self.neutral[randint(0,49)]
+            a = self.positive[randint(0,n_points-1)]
+            p = self.positive[randint(0,n_points-1)]
+            n = self.neutral[randint(0,n_points-1)]
             self.triplets.append((a,p,n, 1))
 
         for i in range(n_points//2):
-            a = self.negative[randint(0,49)]
-            p = self.negative[randint(0,49)]
-            n = self.positive[randint(0,49)]
+            a = self.negative[randint(0,n_points-1)]
+            p = self.negative[randint(0,n_points-1)]
+            n = self.positive[randint(0,n_points-1)]
             self.triplets.append((a,p,n, 2))
 
         for i in range(n_points//2):
-            a = self.negative[randint(0,49)]
-            p = self.negative[randint(0,49)]
-            n = self.neutral[randint(0,49)]
+            a = self.negative[randint(0,n_points-1)]
+            p = self.negative[randint(0,n_points-1)]
+            n = self.neutral[randint(0,n_points-1)]
             self.triplets.append((a,p,n, 2))
 
         for i in range(n_points//2):
-            a = self.neutral[randint(0,49)]
-            p = self.neutral[randint(0,49)]
-            n = self.negative[randint(0,49)]
+            a = self.neutral[randint(0,n_points-1)]
+            p = self.neutral[randint(0,n_points-1)]
+            n = self.negative[randint(0,n_points-1)]
             self.triplets.append((a,p,n, 3))
 
         for i in range(n_points//2):
-            a = self.neutral[randint(0,49)]
-            p = self.neutral[randint(0,49)]
-            n = self.positive[randint(0,49)]
+            a = self.neutral[randint(0,n_points-1)]
+            p = self.neutral[randint(0,n_points-1)]
+            n = self.positive[randint(0,n_points-1)]
             self.triplets.append((a,p,n, 3))
 
         ''' 
@@ -383,17 +425,17 @@ class TripletTestDataset(Dataset):
         print(np.array(self.data[354][0]))
         '''
 
-        self.n = n_points * 3
+        self.n = len(self.triplets)
 
     def __len__(self):
         return self.n
 
     def __getitem__(self, idx):
         a, p, n, l = self.triplets[idx]
-        return torch.FloatTensor([[i] for i in a[0]]), torch.FloatTensor([[i] for i in p[0]]), torch.FloatTensor([[i] for i in n[0]]), l
+        return torch.FloatTensor(a[0]), torch.FloatTensor(p[0]), torch.FloatTensor(n[0]), l
 
     def get_distinct_labels(self):
-        return [1,2, 3]
+        return [1,2,3]
 
 
 class SignalTripletDataset(Dataset):
