@@ -11,7 +11,10 @@ from sklearn.manifold import TSNE
 import matplotlib.patheffects as PathEffects
 import seaborn as sns
 import numpy as np
+import io
 
+import tensorflow as tf
+from pytorch_lightning import _logger as log
 
 def timeNow():
     return time.time()
@@ -75,17 +78,22 @@ def knn(X, y,  k = 3):
     return neigh
 
 
-def visualize(X, y, distinct_labels, name = "tsne.png"):
+def visualize(X, y, distinct_labels, name = "tsne.png", subtitle = "Data"):
     X = np.array(X)
     y = np.array(y)
-    print("Visualizing...")
-    tsne = TSNE()
+    #print("Visualizing...")
+    log.info('Visualising.')
+    tsne = TSNE(random_state = 2334)
     train_tsne_embeds = tsne.fit_transform(X)
-    scatter(train_tsne_embeds, y, distinct_labels, name, "Data")
+    return scatter(train_tsne_embeds, y, distinct_labels, name, subtitle)
 
+
+import torchvision
+import PIL.Image
+from torchvision.transforms import ToTensor
 
 def scatter(x, labels, distinct_labels, name, subtitle=None):
-    print("Scattering...")
+    log.info('Scattering.')
     palette = np.array(sns.color_palette("hls", 10))
     colors = []
     for label in labels:
@@ -93,6 +101,7 @@ def scatter(x, labels, distinct_labels, name, subtitle=None):
   
     f = plt.figure(figsize=(8, 8))
     ax = plt.subplot(aspect='equal')
+    plt.title(subtitle)
 
     sc = ax.scatter(x[:,0], x[:,1], s = 40,  c=colors)
     ax.axis('off')
@@ -102,15 +111,24 @@ def scatter(x, labels, distinct_labels, name, subtitle=None):
     
     for label in distinct_labels:
         xtext, ytext = np.median(x[labels == label, :], axis=0)
+        if np.isnan(xtext) or np.isnan(ytext):
+            continue
         txt = ax.text(xtext, ytext, label, fontsize=24)
+
         txt.set_path_effects([
             PathEffects.Stroke(linewidth=5, foreground="w"),
             PathEffects.Normal()])
         txts.append(txt)
     
         
-    if subtitle != None:
-        plt.suptitle(subtitle)
-        
     plt.savefig("figures/" + name)
+    
+    buf = io.BytesIO()
+    plt.savefig(buf, format = 'png')
+    buf.seek(0)
+
+    image = PIL.Image.open(buf)
+    image = ToTensor()(image)
+    return image
+
 

@@ -1,11 +1,14 @@
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, IterableDataset
 
 import h5py
 import pandas as pd
 import os
 import numpy as np
 from math import sin, cos, tan, atan, sqrt, exp
+
+from sklearn import preprocessing
+
 
 from statistics import mean, median, stdev
 from scipy.stats import mode, hmean, gmean, entropy, iqr
@@ -60,13 +63,14 @@ class TripletStatsDataset(Dataset):
 
     def __getitem__(self, idx):
         anchor, positive, negative, label = self.data.iloc[idx]
-        return torch.FloatTensor(anchor), torch.FloatTensor(positive), torch.FloatTensor(negative), label
+        return torch.Tensor(anchor), torch.Tensor(positive), torch.Tensor(negative), label
 
     def __len__(self):
         return self.n
 
     def get_distinct_labels(self):
-        return ["bacillus_anthracis", "ecoli", "pseudomonas_koreensis", "yersinia_pestis", "pantonea_agglomerans", "klebsiella_pneumoniae"]
+        return [0,1,2,3,4,5]
+        #return ["bacillus_anthracis", "ecoli", "pseudomonas_koreensis", "yersinia_pestis", "pantonea_agglomerans", "klebsiella_pneumoniae"]
 
 
 class StatsSubsetDataset(Dataset):
@@ -112,8 +116,21 @@ class StatsSubsetDataset(Dataset):
                 
                 data.append(data_row)
 
-            self.df = self.df.append({"data" : data, "label" : label}, ignore_index = True)
+            self.df = self.df.append({"data" : data, "label" : self.get_label(label)}, ignore_index = True)
      
+    def get_label(self, label):
+        if label == "bacillus_anthracis":
+            return 0
+        if label == "ecoli":
+            return 1
+        if label == "yersinia_pestis":
+            return 2
+        if label == "pseudomonas_koreensis":
+            return 3
+        if label == "pantonea_agglomerans":
+            return 4
+        if label == "klebsiella_pneumoniae":
+            return 5
 
     def column(self, matrix, i):
         return [row[i] for row in matrix]
@@ -126,13 +143,14 @@ class StatsSubsetDataset(Dataset):
         if self.wrapped:
             return data, label
         return torch.FloatTensor(data), label
+    
 
     def get_distinct_labels(self):
-        return ["bacillus_anthracis", "ecoli", "pseudomonas_koreensis", "yersinia_pestis", "pantonea_agglomerans", "klebsiella_pneumoniae"]
+        return [0,1,2,3,4,5]
+        #return ["bacillus_anthracis", "ecoli", "pseudomonas_koreensis", "yersinia_pestis", "pantonea_agglomerans", "klebsiella_pneumoniae"]
     
     def get_vector_len(self):
         return self.n_stats
-
 
 
 class StatsDataset(Dataset):

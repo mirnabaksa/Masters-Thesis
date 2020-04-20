@@ -14,7 +14,7 @@ from sklearn.preprocessing import MinMaxScaler
 import numpy as np
 
 from util import asMinutes, timeSince, showPlot, timeNow, knn, visualize, showPlotFromFile
-from Model import AutoEncoder, DenseAutoEncoder, ConvAutoencoder
+from models import LSTMAutoEncoder, DenseAutoEncoder, ConvAutoencoder
 from SignalDataset import Signal, SignalDataset, TestDataset, StatsTestDataset, StatsDataset, StatsSubsetDataset
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -53,7 +53,7 @@ def train(train_dataset, validation_dataset, vector_size = 1, iterations = 15000
 
     #model = ConvAutoencoder()
     #print(model)
-    model = AutoEncoder(vector_size, hidden_size, vector_size, n_layers = 2, dropout = 0.2, bidirectional = True)
+    model = LSTMAutoEncoder(vector_size, hidden_size, vector_size, num_layers = 2, dropout = 0.2, bidirectional = True)
     #if torch.cuda.device_count() > 1:
     #    print("Using", torch.cuda.device_count(), "GPUs!")
     #    model = nn.DataParallel(model)
