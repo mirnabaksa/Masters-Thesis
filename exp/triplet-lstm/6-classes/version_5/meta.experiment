@@ -1,0 +1,1 @@
+{"name": "default", "version": 5, "tags_path": "exp/triplet-lstm/default/version_5/meta_tags.csv", "metrics_path": "exp/triplet-lstm/default/version_5/metrics.csv", "autosave": false, "description": null, "created_at": "2020-04-21 06:56:02.460046", "exp_hash": "default_v5"}

@@ -63,7 +63,7 @@ class TripletStatsDataset(Dataset):
 
     def __getitem__(self, idx):
         anchor, positive, negative, label = self.data.iloc[idx]
-        return torch.Tensor(anchor), torch.Tensor(positive), torch.Tensor(negative), label
+        return torch.tensor(anchor), torch.tensor(positive), torch.tensor(negative), torch.tensor(label)
 
     def __len__(self):
         return self.n
@@ -81,7 +81,7 @@ class StatsSubsetDataset(Dataset):
         self.n_stats = len(subset[0][0][0])
         self.seq2seq = seq2seq
         self.wrapped = wrapped
-        
+
         cols = [[] for j in range(self.n_stats)]
 
         for point in self.subset:
@@ -142,7 +142,7 @@ class StatsSubsetDataset(Dataset):
         data, label = self.df.loc[idx]
         if self.wrapped:
             return data, label
-        return torch.FloatTensor(data), label
+        return torch.tensor(data), torch.tensor(label)
     
 
     def get_distinct_labels(self):
@@ -290,9 +290,10 @@ class TestDataset(Dataset):
         n_classes = 4
         n_points = 30
 
-        #self.data = [([0.1,0.2,0.3,0.4,0.5],1) , ([-0.1,-0.2,-0.3,-0.4,-0.5],2)]
-        #self.n = 2
-        #return
+        self.data = [([0.1,0.2,0.3,0.4,0.5],1) , ([-0.1,-0.2,-0.3,-0.4,-0.5],2)]
+        self.n = 2
+        return
+
         self.data = []
         for i in range(n_points):
             test_sample = []
@@ -358,7 +359,7 @@ class TestDataset(Dataset):
 
     def __getitem__(self, idx):
         data, label = self.data[idx]
-        return torch.FloatTensor(data), label
+        return torch.FloatTensor([[i] for i in data]), label
 
     def get_distinct_labels(self):
         return [1,2,3,4]

@@ -82,7 +82,7 @@ def visualize(X, y, distinct_labels, name = "tsne.png", subtitle = "Data"):
     X = np.array(X)
     y = np.array(y)
     #print("Visualizing...")
-    log.info('Visualising.')
+    #log.info('Visualising.')
     tsne = TSNE(random_state = 2334)
     train_tsne_embeds = tsne.fit_transform(X)
     return scatter(train_tsne_embeds, y, distinct_labels, name, subtitle)
@@ -93,7 +93,7 @@ import PIL.Image
 from torchvision.transforms import ToTensor
 
 def scatter(x, labels, distinct_labels, name, subtitle=None):
-    log.info('Scattering.')
+    #log.info('Scattering.')
     palette = np.array(sns.color_palette("hls", 10))
     colors = []
     for label in labels:

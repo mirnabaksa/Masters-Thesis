@@ -1,6 +1,7 @@
 import os
 from argparse import ArgumentParser
 from collections import OrderedDict
+import pickle
 
 import torch
 import torch.nn as nn
@@ -13,7 +14,6 @@ from pytorch_lightning import Callback
 from pytorch_lightning import _logger as log
 from pytorch_lightning.core import LightningModule
 
-from torch.utils.tensorboard import SummaryWriter
 
 from SignalDataset import StatsDataset, StatsSubsetDataset, TripletStatsDataset
 from util import knn, visualize, showPlot
@@ -29,7 +29,6 @@ class TripletModel(LightningModule):
         super().__init__()
         self.hparams = hparams
         self.batch_size = hparams.batch_size
-
         # if you specify an example input, the summary will show input/output for each layer
         #self.example_input_array = (torch.rand(64, 75, 3), torch.rand(64, 75, 3), torch.rand(64, 75, 3))
         #print(self.example_input_array.shape)
@@ -38,11 +37,12 @@ class TripletModel(LightningModule):
         self.__build_model()
 
 
+
     # ---------------------
     # MODEL SETUP
     # ---------------------
     def __build_model(self):
-        #log.info('Build model called.')
+        log.info('Build model called.')
         if self.hparams.type == "lstm":
             self.model = TripletLSTMEncoder(self.hparams.features, 
                 self.hparams.hidden_size, 
@@ -51,6 +51,7 @@ class TripletModel(LightningModule):
                 dropout = self.hparams.drop_prob)
         else:
             self.model = TripletConvolutionalEncoder(self.hparams.features,
+                filters = self.hparams.filters,
                 dropout = self.hparams.drop_prob)
         
 
@@ -76,7 +77,7 @@ class TripletModel(LightningModule):
         a, p, n = self(in_a, in_p, in_n)
         loss_val = self.loss(a, p, n)
         
-        tqdm_dict = {'train_loss': loss_val}
+        tqdm_dict = {'train_loss': loss_val, 'step' : self.current_epoch}
         output = OrderedDict({
             'latent': a.squeeze().tolist(),
             'label' : l.tolist(),
@@ -89,20 +90,25 @@ class TripletModel(LightningModule):
 
     ## method not called on last epoch!
     def training_epoch_end(self, outputs):
-        if self.current_epoch == 0 or self.current_epoch % self.hparams.plot_every == 0 or self.current_epoch == self.hparams.epochs - 1:
-            self.latents = []
-            self.labels = []
+        if self.logger and (self.current_epoch == 0 or self.current_epoch % self.hparams.plot_every == 0 or self.current_epoch == self.hparams.epochs - 1):
+            latents = []
+            labels = []
             for output in outputs:
-                self.latents.extend(output['latent'])
-                self.labels.extend(output['label'])
+                latents.extend(output['latent'])
+                labels.extend(output['label'])
 
-            image = visualize(self.latents, 
-                self.labels, 
+            image = visualize(latents, 
+                labels, 
                 self.train_dataset.get_distinct_labels(), 
                 "train-tsne.png", 
                 self.hparams.model + " " + self.hparams.type)
 
+            if self.current_epoch == self.hparams.epochs - 1:
+                log.info("Pickling...")
+                pickle.dump(latents, open("latents-triplet.p", "wb"))
+                pickle.dump(labels, open("labels-triplet.p", "wb"))
             self.logger.experiment.add_image('train', image, self.current_epoch)
+            
 
         return {}
 
@@ -117,7 +123,6 @@ class TripletModel(LightningModule):
             'val_loss': loss_val
         })
 
-        # can also return just a scalar instead of a dict (return loss_val)
         return output
       
 
@@ -125,15 +130,15 @@ class TripletModel(LightningModule):
         # if returned a scalar from validation_step, outputs is a list of tensor scalars
         # we return just the average in this case (if we want)
         # return torch.stack(outputs).mean()
-        if self.current_epoch == 0 or self.current_epoch % self.hparams.plot_every == 0 or self.current_epoch == self.hparams.epochs - 1:
-            self.latents = []
-            self.labels = []
+        if self.logger and (self.current_epoch == 0 or self.current_epoch % self.hparams.plot_every == 0 or self.current_epoch == self.hparams.epochs - 1):
+            latents = []
+            labels = []
             for output in outputs:
-                self.latents.extend(output['latent'])
-                self.labels.extend(output['label'])
+                latents.extend(output['latent'])
+                labels.extend(output['label'])
 
-            image = visualize(self.latents, 
-                self.labels, 
+            image = visualize(latents, 
+                labels, 
                 self.train_dataset.get_distinct_labels(), 
                 "val-tsne.png", 
                 self.hparams.model + " " + self.hparams.type)
@@ -151,7 +156,7 @@ class TripletModel(LightningModule):
             val_loss_mean += val_loss
 
         val_loss_mean /= len(outputs)
-        tqdm_dict = {'val_loss': val_loss_mean}
+        tqdm_dict = {'val_loss': val_loss_mean, 'step' : self.current_epoch}
         result = {'progress_bar': tqdm_dict, 'log': tqdm_dict, 'val_loss': val_loss_mean}
         return result
 
@@ -176,7 +181,8 @@ class TripletModel(LightningModule):
         loader = DataLoader(
             dataset=dataset,
             batch_size=self.hparams.batch_size,
-            num_workers = 3)
+            num_workers = 3,
+            drop_last = True)
 
         return loader
 
@@ -211,9 +217,6 @@ class TripletModel(LightningModule):
     def test_dataloader(self):
         return self.__dataloader(set="test")
 
-
-    ### TESTING
-
     def test_step(self, batch, batch_idx):
         in_a, _, _, l = batch
         a = self.get_latent(in_a)
@@ -227,32 +230,38 @@ class TripletModel(LightningModule):
 
     def test_epoch_end(self, outputs):
         log.info('Fitting predictor...')
-        predictor = knn(self.latents, self.labels, 3)
+        latents = pickle.load(open("latents-triplet.p", "rb"))
+        labels = pickle.load(open("labels-triplet.p", "rb"))
+        predictor = knn(latents, labels, 3)
 
         latents = []
         labels = []
 
         for output in outputs:
-            latents.extend(output['latent'].squeeze().tolist())
+            latents.extend(output['latent'])
             labels.extend(output['labels'])
 
         predicted = predictor.predict(latents)
         correct = (labels == predicted).sum()
         all = len(labels)
         test_acc = correct/all
-        self.logger.experiment.add_scalar('test_acc', test_acc)
+        
+        if self.logger:
+            self.logger.experiment.add_scalar('test_acc', test_acc)
 
         image = visualize(latents, 
             labels, 
             self.train_dataset.get_distinct_labels(), 
             "tsne-test.png",
             self.hparams.model + " " + self.hparams.type)   
-        self.logger.experiment.add_image('test', image, self.current_epoch)
+
+        if self.logger:
+            self.logger.experiment.add_image('test', image, self.current_epoch)
 
 
             # reduce manually when using dp
-            #if self.trainer.use_dp or self.trainer.use_ddp2:
-            #    test_loss = torch.mean(test_loss)
+        #if self.trainer.use_dp or self.trainer.use_ddp2:
+        #    test_loss = torch.mean(test_loss)
 
         tqdm_dict = {'test_acc': test_acc}
         result = {'progress_bar': tqdm_dict, 'log': tqdm_dict, 'test_acc': test_acc}

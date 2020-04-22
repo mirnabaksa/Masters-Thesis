@@ -1,0 +1,16 @@
+key,value
+model,triplet
+type,lstm
+features,3
+num_layers,1
+hidden_size,12
+drop_prob,0.2
+bidirectional,False
+epochs,40
+optimizer_name,adam
+batch_size,64
+plot_every,4
+num_classes,4
+gpus,2
+use_16bit,False
+distributed_backend,ddp
