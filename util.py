@@ -85,19 +85,21 @@ def visualize(X, y, distinct_labels, name = "tsne.png", subtitle = "Data"):
     #log.info('Visualising.')
     tsne = TSNE(random_state = 2334)
     train_tsne_embeds = tsne.fit_transform(X)
-    return scatter(train_tsne_embeds, y, distinct_labels, name, subtitle)
+    return scatter(train_tsne_embeds, y, name, subtitle)
 
 
 import torchvision
 import PIL.Image
 from torchvision.transforms import ToTensor
 
-def scatter(x, labels, distinct_labels, name, subtitle=None):
+def scatter(x, labels, name, subtitle=None):
+    distinct_labels = ["bacillus_anthracis", "ecoli", "pseudomonas_koreensis", "pantonea_agglomerans", "yersinia_pestis", "klebsiella_pneumoniae"]
+    #distinct_labels = ["bla", "sin", "cos", "tan"]
     #log.info('Scattering.')
     palette = np.array(sns.color_palette("hls", 10))
     colors = []
     for label in labels:
-        colors.append(palette[distinct_labels.index(label)])
+        colors.append(palette[label])
   
     f = plt.figure(figsize=(8, 8))
     ax = plt.subplot(aspect='equal')
@@ -109,8 +111,8 @@ def scatter(x, labels, distinct_labels, name, subtitle=None):
     
     txts = []
     
-    for label in distinct_labels:
-        xtext, ytext = np.median(x[labels == label, :], axis=0)
+    for i, label in enumerate(distinct_labels):
+        xtext, ytext = np.median(x[labels == i, :], axis=0)
         if np.isnan(xtext) or np.isnan(ytext):
             continue
         txt = ax.text(xtext, ytext, label, fontsize=24)

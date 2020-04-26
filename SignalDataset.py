@@ -142,7 +142,10 @@ class StatsSubsetDataset(Dataset):
         data, label = self.df.loc[idx]
         if self.wrapped:
             return data, label
-        return torch.tensor(data), torch.tensor(label)
+
+        #noise = np.random.normal(-1,1, (len(data), len(data[0])))
+        target = data
+        return torch.tensor(data), torch.tensor(label), torch.tensor(target)
     
 
     def get_distinct_labels(self):
@@ -161,7 +164,7 @@ class StatsDataset(Dataset):
 
         for i in range(1, len(self.reference)):
             index, label, data = self.reference.loc[i]
-            data = [[float(mean), float(stdev), float(iqr)] for mean, gmean,  med, stdev, entropy, iqr in [line.split(",") for line in data.split("$")]]
+            data = [[float(mean), float(stdev)] for mean, gmean,  med, stdev, entropy, iqr in [line.split(",") for line in data.split("$")]]
             self.df = self.df.append({"data" : data, "label" : label}, ignore_index = True)
         self.n = len(self.df)
 
@@ -184,7 +187,7 @@ class StatsTestDataset(Dataset):
 
     def __init__(self):
         n_classes = 2
-        n_points = 30
+        n_points = 40
         self.chunk = 2
         self.startVector = [SOS_MEAN, SOS_STDEV]
 
@@ -201,8 +204,8 @@ class StatsTestDataset(Dataset):
             data = [sin(i+x) for i in range(x_len)]
             data = normalize([data])[0]
 
-            #stats_data = self.generateStatsData(data)
-            stats_data = data
+            stats_data = self.generateStatsData(data)
+            #stats_data = data
             self.data.append((stats_data, 1))
     
         for i in range(n_points):
@@ -210,8 +213,8 @@ class StatsTestDataset(Dataset):
             x = uniform(2,5)
             data = [cos(i+x) for i in range(x_len)]
             data = normalize([data])[0]
-            #stats_data = self.generateStatsData(data)
-            stats_data = data
+            stats_data = self.generateStatsData(data)
+            #stats_data = data
             self.data.append((stats_data, 2))
         
         self.n = len(self.data)
@@ -275,7 +278,7 @@ class StatsTestDataset(Dataset):
 
     def __getitem__(self, idx):
         data, label = self.data[idx]
-        return torch.FloatTensor(data), label
+        return data, label
 
     def get_distinct_labels(self):
         return [1,2,3,4]
@@ -288,30 +291,30 @@ class TestDataset(Dataset):
 
     def __init__(self):
         n_classes = 4
-        n_points = 30
+        n_points = 60
 
-        self.data = [([0.1,0.2,0.3,0.4,0.5],1) , ([-0.1,-0.2,-0.3,-0.4,-0.5],2)]
-        self.n = 2
-        return
+        #self.data = [([0.1,0.2,0.3,0.4,0.5],1) , ([-0.1,-0.2,-0.3,-0.4,-0.5],2)]
+        #self.n = 2
+        #return
 
         self.data = []
         for i in range(n_points):
             test_sample = []
-            x_len = 50
+            x_len = 300
             x = uniform(0,0.5)
-            data = [sin(exp(x*j)+sqrt(j)) for j in np.arange(0, 1, 0.2)]
+            data = [sin(j) for j in np.arange(0, 1, 0.2)]
             self.data.append((data, 1))
 
         for i in range(n_points):
             test_sample = []
-            x_len = 50
+            x_len = 300
             x = uniform(0.5,1)
-            data = [cos(sqrt(x)*j) for j in np.arange(0, 1, 0.2)]
+            data = [cos(j) for j in np.arange(0, 1, 0.2)]
             self.data.append((data, 2))
 
         for i in range(n_points):
             test_sample = []
-            x_len = 50
+            x_len = 300
             x = uniform(0.5,1)
             data = [tan(j) for j in np.arange(0, 1, 0.2)]
             self.data.append((data, 3))
@@ -359,7 +362,8 @@ class TestDataset(Dataset):
 
     def __getitem__(self, idx):
         data, label = self.data[idx]
-        return torch.FloatTensor([[i] for i in data]), label
+        return data, label
+        return torch.FloatTensor([[i] for i in data]), torch.tensor(label), torch.FloatTensor([[i] for i in data])
 
     def get_distinct_labels(self):
         return [1,2,3,4]

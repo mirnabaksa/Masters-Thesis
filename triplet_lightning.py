@@ -98,8 +98,7 @@ class TripletModel(LightningModule):
                 labels.extend(output['label'])
 
             image = visualize(latents, 
-                labels, 
-                self.train_dataset.get_distinct_labels(), 
+                labels,  
                 "train-tsne.png", 
                 self.hparams.model + " " + self.hparams.type)
 
@@ -139,7 +138,6 @@ class TripletModel(LightningModule):
 
             image = visualize(latents, 
                 labels, 
-                self.train_dataset.get_distinct_labels(), 
                 "val-tsne.png", 
                 self.hparams.model + " " + self.hparams.type)
 
@@ -165,9 +163,9 @@ class TripletModel(LightningModule):
     # ---------------------
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters())
-        #scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10)
-        scheduler = None
-        return [optimizer] #, [scheduler]
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10)
+        #scheduler = None
+        return [optimizer] , [scheduler]
 
     def __dataloader(self, set):
         # when using multi-node (ddp) we need to add the  datasampler
@@ -251,7 +249,6 @@ class TripletModel(LightningModule):
 
         image = visualize(latents, 
             labels, 
-            self.train_dataset.get_distinct_labels(), 
             "tsne-test.png",
             self.hparams.model + " " + self.hparams.type)   
 

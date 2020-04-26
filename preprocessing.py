@@ -20,8 +20,8 @@ def constructDatasetCSV(root_dir, dataset_name):
         file_writer.writerow(("file", "label"))
         for sub_dir in listdir(root_dir):
             label = sub_dir
-            #if (not (  label == "bacillus_anthracis" or label == "ecoli" or label == "yersinia_pestis" or label == "pseudomonas_koreensis")):
-            #    continue
+            if (not ( label == "ecoli" or label == "pseudomonas_koreensis")):
+                continue
             
             target_dir = join(root_dir, sub_dir)
             for filename in listdir(target_dir):
@@ -129,4 +129,4 @@ def constructTripletDatasetCSV(root_dir, name):
 if __name__ == '__main__':
     constructDatasetCSV("../Signals/perfect/", dataset_name = "dataset-perfect4.csv")
     constructRawSignalValuesCSV('dataset-perfect4.csv', 'perfect-raw4.csv')
-    constructStatsDataset(source = 'perfect-raw4.csv', dest = 'perfect-stats.csv')
+    constructStatsDataset(source = 'perfect-raw4.csv', dest = 'perfect-stats2class.csv')

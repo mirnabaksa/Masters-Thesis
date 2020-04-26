@@ -17,35 +17,47 @@ class ConvolutionalAutoencoder(nn.Module):
         self.filters = filters
 
         '''self.conv1 = nn.Conv1d(in_size, filters, 3, padding = 1)
-        self.mp1 = nn.MaxPool1d(2)
+        #self.mp1 = nn.MaxPool1d(2)
         self.conv2 = nn.Conv1d(filters, 1, 3, padding = 1)
-        self.bn1 = nn.BatchNorm1d(1)
+        self.bn2 = nn.BatchNorm1d(1)
         self.mp2 = nn.MaxPool1d(2)
         
         self.t_conv1 = nn.ConvTranspose1d(1, filters, 3, stride=2)
-        self.t_conv2 = nn.ConvTranspose1d(filters, in_size, 3, stride=2)'''
+        self.t_conv2 = nn.ConvTranspose1d(filters, in_size, 3, stride=1)'''
         
         #Encoder
-        self.conv1 = nn.Conv1d(in_size, filters, 3, padding = 1)
+        self.conv1 = nn.Conv1d(in_size, 4, 3, padding = 1)
         self.mp1 = nn.MaxPool1d(2)
 
-        self.conv2 = nn.Conv1d(filters, filters//3, 3, padding = 1)
-        self.mp2 = nn.MaxPool1d(2)
+        self.conv2 = nn.Conv1d(4, 8, 3, padding = 1)
+        self.bn2 = nn.BatchNorm1d(8)
+        #self.mp2 = nn.MaxPool1d(2)
 
-        self.conv3 = nn.Conv1d(filters//3, filters//6, 3, padding = 1)
-        self.bn3 = nn.BatchNorm1d(filters//6)
+        self.conv3 = nn.Conv1d(8, 16, in_size, padding = 1)
+        self.bn3 = nn.BatchNorm1d(16)
         self.mp3 = nn.MaxPool1d(2)
 
-        self.conv4 = nn.Conv1d(filters//6, 1, 3, padding = 1)
-        self.bn4 = nn.BatchNorm1d(1)
-        self.mp4 = nn.MaxPool1d(2)
+        self.conv4 = nn.Conv1d(16, 32, 3, padding = 1)
+
+        self.conv5 = nn.Conv1d(32, 64, 3, padding = 1)
+        self.mp5 = nn.MaxPool1d(2)
+
+        self.conv6 = nn.Conv1d(64, 16, 3, padding = 1)
+
+        self.conv7 = nn.Conv1d(16, 1, 3, padding = 1)
+        self.mp7 = nn.MaxPool1d(2)
 
 
         # Decoder
-        self.t_conv1 = nn.ConvTranspose1d(1, filters//6, 3, stride = 2)
-        self.t_conv2 = nn.ConvTranspose1d(filters//6, filters//3, 3, stride = 2)
-        self.t_conv3 = nn.ConvTranspose1d(filters//3, filters, 1, stride = 1)
-        self.t_conv4 = nn.ConvTranspose1d(filters, in_size, 1, stride = 1)
+        self.t_conv1 = nn.ConvTranspose1d(1, 16, 3, stride = 2)
+        self.t_conv2 = nn.ConvTranspose1d(16, 64, 3, stride = 1)
+        self.t_conv3 = nn.ConvTranspose1d(64, 32, 1, stride = 2)
+        self.t_conv4 = nn.ConvTranspose1d(32, 16, 1, stride = 1)
+        self.t_conv5 = nn.ConvTranspose1d(16, 8, 1, stride = 2)
+        self.t_conv6 = nn.ConvTranspose1d(8, 4, 1, stride = 1)
+        self.t_conv7 = nn.ConvTranspose1d(4, in_size, 1, stride = 2)
+        
+        self.dense = nn.Linear(81, 75)
 
         
     def forward(self, x):
@@ -59,22 +71,28 @@ class ConvolutionalAutoencoder(nn.Module):
         input = input.view(batch_size, features, L)
         #print(input.shape)
         x = self.conv1(input)
-        #print(x.shape)
-        #x = self.mp1(x)
-        #print(x.shape)
+        x = self.mp1(x)
+        
         x = self.conv2(x)
-        #print(x.shape)
-        #x = self.bn2(x)
-        #print(x.shape)
-       # x = self.mp2(x)
+        x = self.bn2(x)
+        #x = self.mp2(x)
 
         x = self.conv3(x)
         x = self.bn3(x)
         x = self.mp3(x)
 
         x = self.conv4(x)
-        x = self.bn4(x)
-        x = self.mp4(x)
+
+        x = self.conv5(x)
+        x = self.mp5(x)
+
+        x = self.conv6(x)
+
+        x = self.conv7(x)
+        x = self.mp7(x)
+
+        #print(x.shape)
+        #exit(0)
         #print(x.shape)
         return x
 
@@ -84,15 +102,28 @@ class ConvolutionalAutoencoder(nn.Module):
         #x = input.view(batch_size, features, L)
         #print("recon")
         #print(x.shape)
+        #print(x)
         x = self.t_conv1(x)
         #print(x.shape)
+        #print(x)
         x = self.t_conv2(x)
+        #print(x.shape)
+        #print(x)
         #print(x.shape)
         x = self.t_conv3(x)
         #print(x.shape)
+        
         x = self.t_conv4(x)
         #print(x.shape)
+        x = self.t_conv5(x)
+        x = self.t_conv6(x)
+        x = self.t_conv7(x)
+        #print(x.shape)
+        x = self.dense(x)
+        #print(x.shape)
+        
         x = x.view(batch_size, -1, self.in_size)
+        #print(x)
         #print(x.shape)
         #exit(0)
         return x
@@ -117,6 +148,7 @@ class LSTMAutoEncoder(nn.Module):
         encoded = encoded.view(batch_size, 1, self.hidden_size * (2 if self.bidirectional else 1)).expand(-1, steps, -1)
         y = self.decoder(encoded)
         #print("out",y.shape)
+        #print(y)
         return y
 
 
@@ -166,23 +198,24 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
-        self.bidirectional = bidirectional
+        self.bidirectional = False
         self.output_size = output_size
 
-        self.NN = nn.LSTM(hidden_size * (2 if bidirectional else 1), output_size, batch_first = True, num_layers = num_layers, bidirectional = bidirectional)
-
-        #nn.init.orthogonal_(self.NN.weight_ih_l0, gain=np.sqrt(2))
-        #nn.init.orthogonal_(self.NN.weight_hh_l0, gain=np.sqrt(2))
+        self.NN = nn.LSTM(hidden_size * (2 if bidirectional else 1), output_size, batch_first = True, num_layers = num_layers, bidirectional = False)
+        nn.init.orthogonal_(self.NN.weight_ih_l0, gain=np.sqrt(2))
+        nn.init.orthogonal_(self.NN.weight_hh_l0, gain=np.sqrt(2))
 
     def forward(self, input):
         batch_size, steps, _ = input.shape
         self.NN.flatten_parameters()
         output, hidden = self.NN(input)
-        output = output.view(batch_size, steps, 2 if self.bidirectional else 1, self.output_size)
+        #print("out",output.shape)
         
-        if self.bidirectional:
-            output = output[:,:,0,:] + output[:,:,1,:]
+        #output = output.view(batch_size, steps, 2 if self.bidirectional else 1, self.output_size)
+        #if self.bidirectional:
+        #    output = output[:,:,0,:] + output[:,:,1,:]
 
+    
         return output
 
 class TripletLSTMEncoder(nn.Module):
@@ -239,7 +272,7 @@ class TripletConvolutionalEncoder(nn.Module):
         self.bn2 = nn.BatchNorm1d(1)
         self.mp3 = nn.MaxPool1d(2)'''
 
-        self.conv1 = nn.Conv1d(in_size, filters, 3, padding = 1)
+        '''self.conv1 = nn.Conv1d(in_size, filters, 3, padding = 1)
         #self.mp1 = nn.MaxPool1d(2)
 
         self.conv2 = nn.Conv1d(filters, filters//3, 3, padding = 1)
@@ -251,7 +284,39 @@ class TripletConvolutionalEncoder(nn.Module):
 
         self.conv4 = nn.Conv1d(filters//6, 1, 3, padding = 1)
         self.bn4 = nn.BatchNorm1d(1)
+        self.mp4 = nn.MaxPool1d(2)'''
+
+        self.conv1 = nn.Conv1d(in_size, 4, 3, padding = 1)
+        self.mp1 = nn.MaxPool1d(2)
+
+        self.conv2 = nn.Conv1d(4, 8, 3, padding = 1)
+        self.bn2 = nn.BatchNorm1d(8)
+        self.mp2 = nn.MaxPool1d(2)
+
+        self.conv3 = nn.Conv1d(8, 16, 3, padding = 1)
+        self.bn3 = nn.BatchNorm1d(16)
+        self.mp3 = nn.MaxPool1d(2)
+
+        self.conv4 = nn.Conv1d(16, 32, 3, padding = 1)
+        self.bn4 = nn.BatchNorm1d(32)
         self.mp4 = nn.MaxPool1d(2)
+
+
+        self.conv5 = nn.Conv1d(32, 1, 3, padding = 1)
+        self.bn5 = nn.BatchNorm1d(1)
+        #self.mp5 = nn.MaxPool1d(2)
+
+        #self.conv6 = nn.Conv1d(64, 16, 3, padding = 1)
+        #self.bn6 = nn.BatchNorm1d(16)
+
+        #self.conv7 = nn.Conv1d(64, 16, 3, padding = 1)
+        #self.bn7 = nn.BatchNorm1d(16)
+        #self.mp7 = nn.MaxPool1d(2)
+
+        #self.conv8 = nn.Conv1d(16, 1, 3, padding = 1)
+        #self.bn8 = nn.BatchNorm1d(1)
+        #self.mp8 = nn.MaxPool1d(2)
+
 
     def forward(self, a, p, n):
         enc_a = self.get_latent(a)
@@ -264,23 +329,36 @@ class TripletConvolutionalEncoder(nn.Module):
         batch_size, L, features = input.shape
         input = input.view(batch_size, features, L)
         #print(input.shape)
-        x = self.conv1(input)
-        #print(x.shape)
-        #x = self.mp1(x)
-        #print(x.shape)
-        x = self.conv2(x)
-        #print(x.shape)
-        #x = self.bn1(x)
-        #print(x.shape)
-        #x = self.mp2(x)
-        #print(x.shape)
-        x = self.conv3(x)
+        x = torch.tanh(self.conv1(input))
+        x = self.mp1(x)
+        
+        x = torch.tanh(self.conv2(x))
+        x = self.bn2(x)
+        x = self.mp2(x)
+
+        x = torch.tanh(self.conv3(x))
         x = self.bn3(x)
         x = self.mp3(x)
 
-        x = self.conv4(x)
+        x = torch.tanh(self.conv4(x))
         x = self.bn4(x)
         x = self.mp4(x)
+
+        x = torch.tanh(self.conv5(x))
+        x = self.bn5(x)
+        #x = self.mp5(x)
+
+        #x = torch.tanh(self.conv6(x))
+        #x = self.bn6(x)
+
+        #x = torch.tanh(self.conv7(x))
+        #x = self.bn7(x)
+        #x = self.mp7(x)
+
+        ##x = torch.tanh(self.conv8(x))
+        #x = self.bn8(x)
+        #x = self.mp8(x)
+
         #print(x.shape)
         #exit(0)
         return x

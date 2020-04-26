@@ -2,6 +2,7 @@ import os
 from argparse import ArgumentParser
 from collections import OrderedDict
 import pickle
+import numpy as np
 
 import torch
 import torch.nn as nn
@@ -18,7 +19,7 @@ import torchvision.transforms as transforms
 
 from torch.utils.tensorboard import SummaryWriter
 
-from SignalDataset import StatsDataset, StatsSubsetDataset, TripletStatsDataset, TestDataset
+from SignalDataset import StatsDataset, StatsSubsetDataset, TripletStatsDataset, TestDataset, StatsTestDataset
 from util import knn, visualize, showPlot
 from models import LSTMAutoEncoder, ConvolutionalAutoencoder
 
@@ -70,17 +71,39 @@ class AutoencoderModel(LightningModule):
     def get_latent(self, input):
         return self.model.get_latent(input)
 
-    def loss(self, input, target):
-        #print(input.shape, target.shape)
-        return F.l1_loss(input, target)
+    def loss(self, input, target, latents, labels):
+        #d = nn.PairwiseDistance(p=2)
+        #print(labels)
+        #latents = torch.tensor([[1, 0.0], [0, 2], [0.0, 3], [0.0, 0.0], [0,0], [0,0], [0,0], [0,0]])
+        '''distance_error_pos = 0
+        distance_error_neg = 0
+        for label in labels:
+            indices = [i for i, x in enumerate(labels) if x == label]
+            other = [i for i, x in enumerate(labels) if x != label]
+            #indices = [0,1,2]
+            x = latents[indices]
+            differences = x.unsqueeze(1) - x.unsqueeze(0)
+            distances = torch.sum(differences * differences, -1).sum().div(2)
+            distance_error_pos += distances / len(x)
 
+            x = latents[other]
+            differences = x.unsqueeze(1) - x.unsqueeze(0)
+            distances = torch.sum(differences * differences, -1).sum().div(2)
+            distance_error_neg += distances / len(x)
+                
+        #print(distance_error)  
+        #exit(0)
+        distance = distance_error_pos - distance_error_neg + 0.2
+        distance = torch.mean(torch.max(distance, torch.zeros_like(distance))) '''
+        #print(input.shape)
+        #print(target.shape)
+        return  F.l1_loss(input, target) 
   
     def training_step(self, batch, batch_idx):
-        input, l = batch
+        input, l, target = batch
         output = self(input)
-        loss_val = self.loss(output, input)
-
         latent = self.get_latent(input).squeeze()
+        loss_val = self.loss(output, target, latent, l)
 
         #if self.current_epoch == self.hparams.epochs - 1:
         #    print("####")
@@ -113,7 +136,6 @@ class AutoencoderModel(LightningModule):
 
             image = visualize(latents, 
                 labels, 
-                self.train_dataset.get_distinct_labels(), 
                 "train-tsne.png",
                 self.hparams.model + " " + self.hparams.type)
 
@@ -126,18 +148,17 @@ class AutoencoderModel(LightningModule):
         return {}
 
     def validation_step(self, batch, batch_idx):
-        input, l = batch
+        input, l, target = batch
         output = self(input)
         
-        loss_val = self.loss(output, input)
         latent = self.get_latent(input).squeeze()
+        loss_val = self.loss(output, target, latent, l)
 
         output = OrderedDict({
             'latent' : latent.tolist(),
             'label' : l.tolist(),
             'val_loss': loss_val
         })
-
         # can also return just a scalar instead of a dict (return loss_val)
         return output
       
@@ -146,7 +167,8 @@ class AutoencoderModel(LightningModule):
         # if returned a scalar from validation_step, outputs is a list of tensor scalars
         # we return just the average in this case (if we want)
         # return torch.stack(outputs).mean()
-        if self.logger and (self.current_epoch == 0 or self.current_epoch % self.hparams.plot_every == 0 or self.current_epoch == self.hparams.epochs - 1):
+  
+        if outputs and self.logger and (self.current_epoch == 0 or self.current_epoch % self.hparams.plot_every == 0 or self.current_epoch == self.hparams.epochs - 1):
             latents = []
             labels = []
             for output in outputs:
@@ -156,9 +178,9 @@ class AutoencoderModel(LightningModule):
                 latents.extend(latent)
                 labels.extend(output['label'])
 
+            
             image = visualize(latents, 
                 labels, 
-                self.train_dataset.get_distinct_labels(), 
                 "val-tsne.png", 
                 self.hparams.model + " " + self.hparams.type)
 
@@ -184,9 +206,9 @@ class AutoencoderModel(LightningModule):
     # ---------------------
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters())
-        #scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10)
-        scheduler = None
-        return [optimizer] #, [scheduler]
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10)
+        #scheduler = None
+        return [optimizer], [scheduler]
 
     def __dataloader(self, set):
  
@@ -215,18 +237,18 @@ class AutoencoderModel(LightningModule):
 
 
         dataset = StatsDataset(filename)
-        #dataset = TestDataset()
+        #dataset = StatsTestDataset()
         train_size = int(0.7 * len(dataset)) 
         val_test_size = (len(dataset) - train_size) // 2
-        log.info("Dataset sizes: " + str(train_size) + " " + str(val_test_size))
+        #log.info("Dataset sizes: " + str(train_size) + " " + str(val_test_size))
 
         if((train_size + 2 * val_test_size) != len(dataset)):
             train_size += 1
         train_dataset, validation_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size,  val_test_size, val_test_size]) 
         
-        #self.train_dataset = dataset
-        #self.validation_dataset = dataset
-        #self.test_dataset = dataset
+        #self.train_dataset = train_dataset
+        #self.validation_dataset = validation_dataset
+        #self.test_dataset = test_dataset
         #return
         
         self.train_dataset = StatsSubsetDataset(train_dataset, wrapped = False, minmax = False)
@@ -247,7 +269,7 @@ class AutoencoderModel(LightningModule):
     ### TESTING
 
     def test_step(self, batch, batch_idx):
-        input, l = batch
+        input, l, target = batch
         latent = self.get_latent(input)
 
         output = OrderedDict({
@@ -283,7 +305,6 @@ class AutoencoderModel(LightningModule):
 
         image = visualize(latents, 
             labels, 
-            self.train_dataset.get_distinct_labels(), 
             "tsne-test.png",
             self.hparams.model + " " + self.hparams.type)   
         
