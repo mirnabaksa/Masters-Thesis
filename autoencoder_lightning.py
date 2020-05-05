@@ -10,7 +10,6 @@ import torch.nn.functional as F
 from torch import optim
 from torch.utils.data import DataLoader
 
-
 from pytorch_lightning import Callback
 from pytorch_lightning import _logger as log
 from pytorch_lightning.core import LightningModule
@@ -41,6 +40,7 @@ class AutoencoderModel(LightningModule):
 
         # build model
         self.__build_model()
+        
 
 
     # ---------------------
@@ -58,6 +58,7 @@ class AutoencoderModel(LightningModule):
                 dropout = self.hparams.drop_prob)
         else:
             self.model = ConvolutionalAutoencoder(self.hparams.features, filters = self.hparams.filters)
+
         
 
     # ---------------------
@@ -105,11 +106,11 @@ class AutoencoderModel(LightningModule):
         latent = self.get_latent(input).squeeze()
         loss_val = self.loss(output, target, latent, l)
 
-        #if self.current_epoch == self.hparams.epochs - 1:
-        #    print("####")
-        #    print(input[0])
-        #    print(output[0])
-        #    print("#####")
+        if self.current_epoch == self.hparams.epochs - 1:
+            print("####")
+            print(input[0])
+            print(output[0])
+            print("#####")
         
         tqdm_dict = {'train_loss': loss_val, 'step' : self.current_epoch}
         output = OrderedDict({
@@ -226,36 +227,46 @@ class AutoencoderModel(LightningModule):
 
         return loader
 
+
+
     def prepare_data(self):
         num_classes = self.hparams.num_classes
-        if num_classes == 2:
-            filename = "csv/perfect-stats2class.csv"
-        elif num_classes == 4:
-            filename = "csv/perfect-stats4class.csv"
-        else:
-            filename = "csv/perfect-stats.csv"
+        #if num_classes == 2:
+        #    filename = "csv/perfect-stats2class.csv"
+        #elif num_classes == 4:
+        #    filename = "csv/perfect-stats4class.csv"
+        #else:
+        #    filename = "csv/perfect-stats.csv"
 
 
-        dataset = StatsDataset(filename)
+        #dataset = StatsDataset(filename)
         #dataset = StatsTestDataset()
-        train_size = int(0.7 * len(dataset)) 
-        val_test_size = (len(dataset) - train_size) // 2
+        #train_size = int(0.7 * len(dataset)) 
+        #val_test_size = (len(dataset) - train_size) // 2
         #log.info("Dataset sizes: " + str(train_size) + " " + str(val_test_size))
 
-        if((train_size + 2 * val_test_size) != len(dataset)):
-            train_size += 1
-        train_dataset, validation_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size,  val_test_size, val_test_size]) 
+        #if((train_size + 2 * val_test_size) != len(dataset)):
+        #    train_size += 1
+        #train_dataset, validation_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size,  val_test_size, val_test_size]) 
         
         #self.train_dataset = train_dataset
         #self.validation_dataset = validation_dataset
         #self.test_dataset = test_dataset
         #return
+
+        train_dataset, validation_dataset, test_dataset = torch.load("data/train-" + str(num_classes) + ".p"), torch.load("data/val-" + str(num_classes) + ".p"), torch.load("data/test-" + str(num_classes) + ".p")
         
         self.train_dataset = StatsSubsetDataset(train_dataset, wrapped = False, minmax = False)
         self.validation_dataset = StatsSubsetDataset(validation_dataset, wrapped = False, minmax = False)
         self.test_dataset = StatsSubsetDataset(test_dataset, wrapped = False, minmax = False)
 
-
+        string = str(self.model)
+        if self.hparams.type == "conv":
+            string = string.replace("))", "))<br>")
+            string = string.replace("True)", "True)<br>")
+            string = string.replace("False)", "False)<br>")
+        self.logger.experiment.add_text("model", string)
+        
     def train_dataloader(self):
         return self.__dataloader(set="train")
 
@@ -281,9 +292,9 @@ class AutoencoderModel(LightningModule):
 
     def test_epoch_end(self, outputs):
         log.info('Fitting predictor...')
-        latents = pickle.load(open("latents-auto.p", "rb"))
-        labels = pickle.load(open("labels-auto.p", "rb"))
-        predictor = knn(latents, labels, 3)
+        #latents = pickle.load(open("latents-auto.p", "rb"))
+        #labels = pickle.load(open("labels-auto.p", "rb"))
+        #predictor = knn(latents, labels, self.hparams.k_nn)
 
         latents = []
         labels = []
@@ -295,11 +306,23 @@ class AutoencoderModel(LightningModule):
             latents.extend(output['latent'])
             labels.extend(output['labels'])
 
-        predicted = predictor.predict(latents)
-        correct = (labels == predicted).sum()
-        all = len(labels)
+        train_size = int(0.8 * len(latents))
+        test_size = len(latents) - train_size
+        print(train_size, test_size)
 
+        train_latents, test_latents = latents[:train_size], latents[train_size:]
+        train_labels, test_labels = labels[:train_size], labels[train_size:]
+        print(latents)
+        print(train_latents)
+        print(test_latents)
+        print(len(train_latents), len(test_latents))
+        predictor = knn(train_latents, train_labels, self.hparams.k_nn)
+
+        predicted = predictor.predict(test_latents)
+        correct = (test_labels == predicted).sum()
+        all = len(test_labels)
         test_acc = correct/all
+
         if self.logger:
             self.logger.experiment.add_scalar('test_acc', test_acc)
 

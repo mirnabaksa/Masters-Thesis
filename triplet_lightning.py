@@ -2,6 +2,8 @@ import os
 from argparse import ArgumentParser
 from collections import OrderedDict
 import pickle
+from sklearn import metrics
+from math import sqrt
 
 import torch
 import torch.nn as nn
@@ -51,6 +53,7 @@ class TripletModel(LightningModule):
                 dropout = self.hparams.drop_prob)
         else:
             self.model = TripletConvolutionalEncoder(self.hparams.features,
+                hidden_size = self.hparams.hidden_size,
                 filters = self.hparams.filters,
                 dropout = self.hparams.drop_prob)
         
@@ -65,12 +68,12 @@ class TripletModel(LightningModule):
     def get_latent(self, input):
         return self.model.get_latent(input)
 
-    def loss(self, a, p, n, margin = 0.2):
+    def loss(self, a, p, n): 
+        margin = self.hparams.margin
         d = nn.PairwiseDistance(p=2)
         distance = d(a, p) - d(a, n) + margin 
         loss = torch.mean(torch.max(distance, torch.zeros_like(distance))) 
         return loss
-
   
     def training_step(self, batch, batch_idx):
         in_a, in_p, in_n, l = batch
@@ -97,15 +100,19 @@ class TripletModel(LightningModule):
                 latents.extend(output['latent'])
                 labels.extend(output['label'])
 
+            #if self.current_epoch == self.hparams.epochs - 1:
+            #    print(latents)
+
             image = visualize(latents, 
                 labels,  
-                "train-tsne.png", 
+                self.hparams.threeD,
+                False, 
                 self.hparams.model + " " + self.hparams.type)
 
-            if self.current_epoch == self.hparams.epochs - 1:
-                log.info("Pickling...")
-                pickle.dump(latents, open("latents-triplet.p", "wb"))
-                pickle.dump(labels, open("labels-triplet.p", "wb"))
+            #if self.current_epoch == self.hparams.epochs - 1:
+            #    log.info("Pickling...")
+            #    pickle.dump(latents, open("latents-triplet.p", "wb"))
+            #    pickle.dump(labels, open("labels-triplet.p", "wb"))
             self.logger.experiment.add_image('train', image, self.current_epoch)
             
 
@@ -135,15 +142,17 @@ class TripletModel(LightningModule):
             for output in outputs:
                 latents.extend(output['latent'])
                 labels.extend(output['label'])
+            
+            #print(latents)
 
             image = visualize(latents, 
                 labels, 
-                "val-tsne.png", 
+                self.hparams.threeD,
+                False,
                 self.hparams.model + " " + self.hparams.type)
 
             self.logger.experiment.add_image('validation', image, self.current_epoch)
-
-
+            
         val_loss_mean = 0
         for output in outputs:
             val_loss = output['val_loss']
@@ -154,7 +163,7 @@ class TripletModel(LightningModule):
             val_loss_mean += val_loss
 
         val_loss_mean /= len(outputs)
-        tqdm_dict = {'val_loss': val_loss_mean, 'step' : self.current_epoch}
+        tqdm_dict = {'val_loss': val_loss_mean,'step' : self.current_epoch}
         result = {'progress_bar': tqdm_dict, 'log': tqdm_dict, 'val_loss': val_loss_mean}
         return result
 
@@ -179,31 +188,48 @@ class TripletModel(LightningModule):
         loader = DataLoader(
             dataset=dataset,
             batch_size=self.hparams.batch_size,
-            num_workers = 3,
+            num_workers = 0,
             drop_last = True)
 
         return loader
 
     def prepare_data(self):
         num_classes = self.hparams.num_classes
-        if num_classes == 2:
-            filename = "csv/perfect-stats2class.csv"
+        '''if num_classes == 2:
+            filename = "csv/perfect-stats-2class-test.csv"
         elif num_classes == 4:
-            filename = "csv/perfect-stats4class.csv"
+            filename = "csv/perfect-stats-4class-test.csv"
         else:
-            filename = "csv/perfect-stats.csv"
+            filename = "csv/perfect-stats-test.csv"
 
+        print(self.hparams.num_classes)
         dataset = StatsDataset(filename)
 
         train_size = int(0.7 * len(dataset)) #int(0.8 * len(dataset))
         val_test_size = (len(dataset) - train_size) // 2
         if((train_size + 2 * val_test_size) != len(dataset)):
             train_size += 1
-        train_dataset, validation_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size,  val_test_size, val_test_size]) 
         
-        self.train_dataset = TripletStatsDataset(StatsSubsetDataset(train_dataset, wrapped = True, minmax = False))
-        self.validation_dataset = TripletStatsDataset(StatsSubsetDataset(validation_dataset, wrapped = True, minmax = False))
-        self.test_dataset = TripletStatsDataset(StatsSubsetDataset(test_dataset, wrapped = True, minmax = False))
+        train_dataset, validation_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size,  val_test_size, val_test_size]) 
+        torch.save(train_dataset, "data/train-4-200.p")
+        torch.save(validation_dataset, "data/val-4-200.p")
+        torch.save(test_dataset, "data/test-4-200.p")
+        print(len(dataset))
+        exit(0)
+        '''
+        
+        train_dataset, validation_dataset, test_dataset = torch.load("data/train-" + str(num_classes) + "-200.p"), torch.load("data/val-" + str(num_classes) + "-200.p"), torch.load("data/test-" + str(num_classes) + "-200.p")
+
+        self.train_dataset = TripletStatsDataset(StatsSubsetDataset(train_dataset, wrapped = True, minmax = self.hparams.min_max))
+        self.validation_dataset = TripletStatsDataset(StatsSubsetDataset(validation_dataset, wrapped = True, minmax = self.hparams.min_max))
+        self.test_dataset = TripletStatsDataset(StatsSubsetDataset(test_dataset, wrapped = True, minmax = self.hparams.min_max))
+
+        string = str(self.model)
+        if self.hparams.type == "conv":
+            string = string.replace("))", "))<br>")
+            string = string.replace("True)", "True)<br>")
+            string = string.replace("False)", "False)<br>")
+        self.logger.experiment.add_text("model", string)
 
 
     def train_dataloader(self):
@@ -226,12 +252,9 @@ class TripletModel(LightningModule):
 
         return output
 
+
     def test_epoch_end(self, outputs):
         log.info('Fitting predictor...')
-        latents = pickle.load(open("latents-triplet.p", "rb"))
-        labels = pickle.load(open("labels-triplet.p", "rb"))
-        predictor = knn(latents, labels, 3)
-
         latents = []
         labels = []
 
@@ -239,21 +262,49 @@ class TripletModel(LightningModule):
             latents.extend(output['latent'])
             labels.extend(output['labels'])
 
-        predicted = predictor.predict(latents)
-        correct = (labels == predicted).sum()
-        all = len(labels)
+        train_size = int(0.7 * len(labels))
+        test_size = len(labels) - train_size
+
+        train_latents, test_latents = latents[:train_size], latents[train_size:]
+        train_labels, test_labels = labels[:train_size], labels[train_size:]
+        k = int(sqrt(len(train_latents)))
+        if k%2 == 0:
+            k += 1
+        print("Using k... ", k)
+        self.logger.experiment.add_text("K", str(k))
+        predictor = knn(train_latents, train_labels, k)
+
+        predicted = predictor.predict(test_latents)
+        acc = metrics.accuracy_score(test_labels, predicted)
+        print("calculated acc: ", acc)
+        
+        correct = 0
+        for i in range(len(predicted)):
+            if test_labels[i] == predicted[i]:
+                correct += 1
+    
+        all = len(test_labels)
         test_acc = correct/all
+        print(str(correct) + " of " + str(all))
         
         if self.logger:
             self.logger.experiment.add_scalar('test_acc', test_acc)
 
         image = visualize(latents, 
             labels, 
-            "tsne-test.png",
-            self.hparams.model + " " + self.hparams.type)   
+            three_d = self.hparams.threeD,
+            test = True,
+            subtitle = self.hparams.model + " " + self.hparams.type)  
+
+        all_image = visualize(latents, 
+            labels, 
+            three_d = self.hparams.threeD,
+            test = False,
+            subtitle = self.hparams.model + " " + self.hparams.type)    
 
         if self.logger:
             self.logger.experiment.add_image('test', image, self.current_epoch)
+            self.logger.experiment.add_image('test-all', all_image, self.current_epoch)
 
 
             # reduce manually when using dp

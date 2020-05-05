@@ -38,7 +38,7 @@ class TripletStatsDataset(Dataset):
 
         self.data = pd.DataFrame(columns = ["anchor", "positive", "negative", "label"])
 
-        num_samples = 3
+        num_samples = 5
         for stats, label in self.flat_data.values.tolist():
             for other_label in self.get_distinct_labels():
                 if label == other_label:
@@ -52,7 +52,7 @@ class TripletStatsDataset(Dataset):
                     
                 pos = pos.sample(num_samples)
                 neg = neg.sample(num_samples)
-
+                
                 for i in range(num_samples):
                     positive, labp = pos.values[i]
                     negative, labn = neg.values[i]
@@ -164,7 +164,7 @@ class StatsDataset(Dataset):
 
         for i in range(1, len(self.reference)):
             index, label, data = self.reference.loc[i]
-            data = [[float(mean), float(stdev)] for mean, gmean,  med, stdev, entropy, iqr in [line.split(",") for line in data.split("$")]]
+            data = [[float(mean), float(stdev), float(iqr)] for mean, gmean,  med, stdev, entropy, iqr in [line.split(",") for line in data.split("$")]]
             self.df = self.df.append({"data" : data, "label" : label}, ignore_index = True)
         self.n = len(self.df)
 

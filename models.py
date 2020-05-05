@@ -26,7 +26,7 @@ class ConvolutionalAutoencoder(nn.Module):
         self.t_conv2 = nn.ConvTranspose1d(filters, in_size, 3, stride=1)'''
         
         #Encoder
-        self.conv1 = nn.Conv1d(in_size, 4, 3, padding = 1)
+        '''self.conv1 = nn.Conv1d(in_size, 4, 3, padding = 1)
         self.mp1 = nn.MaxPool1d(2)
 
         self.conv2 = nn.Conv1d(4, 8, 3, padding = 1)
@@ -57,11 +57,55 @@ class ConvolutionalAutoencoder(nn.Module):
         self.t_conv6 = nn.ConvTranspose1d(8, 4, 1, stride = 1)
         self.t_conv7 = nn.ConvTranspose1d(4, in_size, 1, stride = 2)
         
-        self.dense = nn.Linear(81, 75)
+        self.dense = nn.Linear(81, 75)'''
+
+        self.encoder = nn.Sequential(
+            nn.Conv1d(in_size, 8, 3),
+            nn.ReLU(),
+            #nn.MaxPool1d(2),
+
+            nn.Conv1d(8, 32, 4),
+            nn.BatchNorm1d(32),
+            nn.ReLU(),
+            #nn.MaxPool1d(2),
+
+            nn.Conv1d(32, 16, 3),
+            nn.BatchNorm1d(16),
+            nn.ReLU(),
+            #nn.MaxPool1d(2),
+
+            nn.Conv1d(16, 64, 4),
+            nn.ReLU(),
+            nn.Conv1d(64, 128, 5),
+            nn.ReLU(),
+            #nn.MaxPool1d(2),
+
+            nn.Conv1d(128, 32, 3),
+            nn.ReLU(),
+            nn.Conv1d(32, 1, 3),
+            nn.Tanh(),
+
+        )
+
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose1d(1, 32, 3),
+            nn.ReLU(),
+            nn.ConvTranspose1d(32, 128, 3),
+            nn.ReLU(),
+            nn.ConvTranspose1d(128, 64, 5),
+            nn.ReLU(),
+            nn.ConvTranspose1d(64, 16, 4),
+            nn.ReLU(),
+            nn.ConvTranspose1d(16, 32, 3),
+            nn.ReLU(),
+            nn.ConvTranspose1d(32, 8, 4),
+            nn.ReLU(),
+            nn.ConvTranspose1d(8, in_size, 3),
+            nn.Tanh(),
+        )
 
         
     def forward(self, x):
-        #print("in", x.shape)
         encoded = self.get_latent(x)
         reconstructed = self.get_reconstructed(encoded)
         return reconstructed
@@ -69,63 +113,14 @@ class ConvolutionalAutoencoder(nn.Module):
     def get_latent(self, input):
         batch_size, L, features = input.shape
         input = input.view(batch_size, features, L)
-        #print(input.shape)
-        x = self.conv1(input)
-        x = self.mp1(x)
-        
-        x = self.conv2(x)
-        x = self.bn2(x)
-        #x = self.mp2(x)
-
-        x = self.conv3(x)
-        x = self.bn3(x)
-        x = self.mp3(x)
-
-        x = self.conv4(x)
-
-        x = self.conv5(x)
-        x = self.mp5(x)
-
-        x = self.conv6(x)
-
-        x = self.conv7(x)
-        x = self.mp7(x)
-
-        #print(x.shape)
-        #exit(0)
+        x = self.encoder(input)
         #print(x.shape)
         return x
 
     def get_reconstructed(self, x):
-        #print("recon in ",x.shape)
         batch_size, _, _ = x.shape
-        #x = input.view(batch_size, features, L)
-        #print("recon")
-        #print(x.shape)
-        #print(x)
-        x = self.t_conv1(x)
-        #print(x.shape)
-        #print(x)
-        x = self.t_conv2(x)
-        #print(x.shape)
-        #print(x)
-        #print(x.shape)
-        x = self.t_conv3(x)
-        #print(x.shape)
-        
-        x = self.t_conv4(x)
-        #print(x.shape)
-        x = self.t_conv5(x)
-        x = self.t_conv6(x)
-        x = self.t_conv7(x)
-        #print(x.shape)
-        x = self.dense(x)
-        #print(x.shape)
-        
+        x = self.decoder(x)
         x = x.view(batch_size, -1, self.in_size)
-        #print(x)
-        #print(x.shape)
-        #exit(0)
         return x
 
 class LSTMAutoEncoder(nn.Module):
@@ -139,21 +134,14 @@ class LSTMAutoEncoder(nn.Module):
         self.decoder = Decoder(hidden_size, output_size, num_layers, dropout, bidirectional)
 
     def forward(self, input):
-        #print("inforward",input.shape)
         batch_size, steps, _ = input.shape
-        #print("here", steps)
         encoded = self.encoder(input)
-        #print("here2")
-        #print(encoded.view(batch_size, 1, self.hidden_size).expand(-1, steps, -1).shape)
         encoded = encoded.view(batch_size, 1, self.hidden_size * (2 if self.bidirectional else 1)).expand(-1, steps, -1)
         y = self.decoder(encoded)
-        #print("out",y.shape)
-        #print(y)
         return y
 
 
     def get_latent(self, input):
-        #print("latent",input.shape)
         latent = self.encoder.get_latent(input)
         return latent
 
@@ -215,7 +203,6 @@ class Decoder(nn.Module):
         #if self.bidirectional:
         #    output = output[:,:,0,:] + output[:,:,1,:]
 
-    
         return output
 
 class TripletLSTMEncoder(nn.Module):
@@ -225,11 +212,15 @@ class TripletLSTMEncoder(nn.Module):
         self.num_layers = num_layers
         self.bidirectional = bidirectional
         self.NN = nn.LSTM(input_size, hidden_size, bidirectional = bidirectional, num_layers = num_layers, batch_first = True, dropout = dropout)
-
+        self.pr = True
         #nn.init.orthogonal_(self.NN.weight_ih_l0, gain=np.sqrt(2))
         #nn.init.orthogonal_(self.NN.weight_hh_l0, gain=np.sqrt(2))
 
     def forward(self, a, p, n):
+        if self.pr:
+            print(a.shape)
+            self.pr = False
+
         out_a = self.output(a)
         out_p = self.output(p)
         out_n = self.output(n)
@@ -259,65 +250,61 @@ class TripletLSTMEncoder(nn.Module):
 
 
 class TripletConvolutionalEncoder(nn.Module):
-    def __init__(self, in_size, filters, dropout):
+    def __init__(self, in_size, hidden_size, filters, dropout):
         super(TripletConvolutionalEncoder, self).__init__()
 
-        ''' self.conv1 = nn.Conv1d(in_size, filters, 3, padding = 2)
-        self.mp1 = nn.MaxPool1d(2)
-        self.conv2 = nn.Conv1d(filters, filters//2, 3, padding = 2)
-        #self.bn1 = nn.BatchNorm1d(filters//2)
-        self.mp2 = nn.MaxPool1d(2)
+        self.pr = True
+        self.hidden_size = hidden_size
 
-        self.conv3 = nn.Conv1d(filters//2, 1, 3, padding = 2)
-        self.bn2 = nn.BatchNorm1d(1)
-        self.mp3 = nn.MaxPool1d(2)'''
+        '''self.encoder = nn.Sequential(
+            nn.Conv1d(in_size, filters, 3, padding = 1),
+            nn.BatchNorm1d(filters),
+            nn.MaxPool1d(2),
 
-        '''self.conv1 = nn.Conv1d(in_size, filters, 3, padding = 1)
-        #self.mp1 = nn.MaxPool1d(2)
+            nn.Conv1d(filters, filters // 2, 3, padding = 1),
+            nn.BatchNorm1d(filters // 2),
+            nn.MaxPool1d(2),
 
-        self.conv2 = nn.Conv1d(filters, filters//3, 3, padding = 1)
-        #self.mp2 = nn.MaxPool1d(2)
+            nn.Conv1d(filters // 2, filters // 4, 3, padding = 1),
+            nn.BatchNorm1d(filters // 4),
 
-        self.conv3 = nn.Conv1d(filters//3, filters//6, 3, padding = 1)
-        self.bn3 = nn.BatchNorm1d(filters//6)
-        self.mp3 = nn.MaxPool1d(2)
+            nn.Conv1d(filters // 4, 1, 3, padding = 1),
+            nn.BatchNorm1d(1),
+        )
 
-        self.conv4 = nn.Conv1d(filters//6, 1, 3, padding = 1)
-        self.bn4 = nn.BatchNorm1d(1)
-        self.mp4 = nn.MaxPool1d(2)'''
+        #
+         self.encoder = nn.Sequential(
+            nn.Conv1d(in_size, 8, 3,  padding = 1),
+            nn.Tanh(),
 
-        self.conv1 = nn.Conv1d(in_size, 4, 3, padding = 1)
-        self.mp1 = nn.MaxPool1d(2)
+            nn.Conv1d(8, 16, 3, padding = 1),
+            nn.Tanh(),
+            nn.MaxPool1d(2),
 
-        self.conv2 = nn.Conv1d(4, 8, 3, padding = 1)
-        self.bn2 = nn.BatchNorm1d(8)
-        self.mp2 = nn.MaxPool1d(2)
+            nn.Conv1d(16, 1, 3, stride = 3, padding = 1),
+            nn.Tanh(),
 
-        self.conv3 = nn.Conv1d(8, 16, 3, padding = 1)
-        self.bn3 = nn.BatchNorm1d(16)
-        self.mp3 = nn.MaxPool1d(2)
+            nn.Linear(25, 4)
+        )
+        )
+        '''
 
-        self.conv4 = nn.Conv1d(16, 32, 3, padding = 1)
-        self.bn4 = nn.BatchNorm1d(32)
-        self.mp4 = nn.MaxPool1d(2)
+        self.encoder = nn.Sequential(
+            nn.Conv1d(in_size, 8, 3,  padding = 1),
+            nn.Tanh(),
 
+            nn.Conv1d(8, 16, 3, padding = 1),
+            nn.Tanh(),
+            nn.MaxPool1d(2),
 
-        self.conv5 = nn.Conv1d(32, 1, 3, padding = 1)
-        self.bn5 = nn.BatchNorm1d(1)
-        #self.mp5 = nn.MaxPool1d(2)
+            nn.Conv1d(16, 1, 3, stride = 3, padding = 1),
+            nn.Tanh(),
+            nn.Dropout(0.5),
 
-        #self.conv6 = nn.Conv1d(64, 16, 3, padding = 1)
-        #self.bn6 = nn.BatchNorm1d(16)
+            nn.Linear(25, self.hidden_size)
+        )
 
-        #self.conv7 = nn.Conv1d(64, 16, 3, padding = 1)
-        #self.bn7 = nn.BatchNorm1d(16)
-        #self.mp7 = nn.MaxPool1d(2)
-
-        #self.conv8 = nn.Conv1d(16, 1, 3, padding = 1)
-        #self.bn8 = nn.BatchNorm1d(1)
-        #self.mp8 = nn.MaxPool1d(2)
-
-
+  
     def forward(self, a, p, n):
         enc_a = self.get_latent(a)
         enc_p = self.get_latent(p)
@@ -325,40 +312,15 @@ class TripletConvolutionalEncoder(nn.Module):
         return enc_a, enc_p, enc_n
 
     def get_latent(self, input):
-        #print(input.shape)
+        
         batch_size, L, features = input.shape
         input = input.view(batch_size, features, L)
-        #print(input.shape)
-        x = torch.tanh(self.conv1(input))
-        x = self.mp1(x)
+        y = self.encoder(input)
+        y = y.view(batch_size, self.hidden_size, 1)
         
-        x = torch.tanh(self.conv2(x))
-        x = self.bn2(x)
-        x = self.mp2(x)
+        if self.pr:
+            print(y.shape)
+            self.pr = False
 
-        x = torch.tanh(self.conv3(x))
-        x = self.bn3(x)
-        x = self.mp3(x)
-
-        x = torch.tanh(self.conv4(x))
-        x = self.bn4(x)
-        x = self.mp4(x)
-
-        x = torch.tanh(self.conv5(x))
-        x = self.bn5(x)
-        #x = self.mp5(x)
-
-        #x = torch.tanh(self.conv6(x))
-        #x = self.bn6(x)
-
-        #x = torch.tanh(self.conv7(x))
-        #x = self.bn7(x)
-        #x = self.mp7(x)
-
-        ##x = torch.tanh(self.conv8(x))
-        #x = self.bn8(x)
-        #x = self.mp8(x)
-
-        #print(x.shape)
-        #exit(0)
-        return x
+        return y
+        

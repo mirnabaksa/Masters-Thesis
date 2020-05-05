@@ -15,13 +15,15 @@ csv.field_size_limit(sys.maxsize)
 
 def constructDatasetCSV(root_dir, dataset_name):
     print("Constructing csv...")
+    labels = []
     with open('csv/' + dataset_name, 'w') as dataset_file:
         file_writer = csv.writer(dataset_file)
         file_writer.writerow(("file", "label"))
         for sub_dir in listdir(root_dir):
             label = sub_dir
-            if (not ( label == "ecoli" or label == "pseudomonas_koreensis")):
-                continue
+            labels.append(label)
+            #if (not ( label == "ecoli" or label == "pseudomonas_koreensis" or label == "pantonea_agglomerans" or label == "yersinia_pestis")):
+            #    continue
             
             target_dir = join(root_dir, sub_dir)
             for filename in listdir(target_dir):
@@ -44,7 +46,7 @@ def constructRawSignalValuesCSV(dataset_csv,  name = 'raw_dataset.csv'):
         index, filename, label = df_semantic.loc[i]
         f = h5py.File(filename, 'r')
         data = np.array(f["Raw"]["Reads"]["Read_981"]["Signal"]).astype(np.float)
-        data = minmax_scale(data, feature_range = (0,1))
+        #data = minmax_scale(data, feature_range = (0,1))
 
         for i in range(len(data)//read_len):
             data_chunk = data[i*read_len : (i+1)*read_len]
@@ -57,21 +59,22 @@ def constructRawSignalValuesCSV(dataset_csv,  name = 'raw_dataset.csv'):
 
 from sklearn.preprocessing import minmax_scale, normalize
 
-def constructStatsDataset(source = "raw_dataset.csv", dest = "stats_dataset.csv", chunk = 400):
+def constructStatsDataset(source = "raw_dataset.csv", dest = "stats_dataset.csv", chunk = 200):
     df_raw = pd.read_csv('csv/' + source)  
     column_names = ["label","stats_data"]
     df = pd.DataFrame(columns=column_names)
-
+    labels = []
     for i in range(len(df_raw)):
         row = df_raw.loc[i]
         index, label, data = row
+        if label not in labels:
+            labels.append(label)
 
         s = 0
         splitted = data.split(",")
         splitted = [float(num) for num in splitted]
         
         stats_data = []
-        means = []
         for i in range(len(splitted)//chunk):
             data_chunk = splitted[i*chunk : (i+1)*chunk]
             if len(data_chunk) < 2:
@@ -82,17 +85,25 @@ def constructStatsDataset(source = "raw_dataset.csv", dest = "stats_dataset.csv"
             data_stdev = stdev(data_chunk)
             data_entropy = entropy(data_chunk)
             data_iqr = iqr(data_chunk)
+            data_max, data_min = max(data_chunk), min(data_chunk)
             #data_mod = mode(data_chunk)[0][0]
             #data_skew = skew(data_chunk)
-            means.append(data_mean)
-            stats = [data_mean, data_gmean, data_median, data_stdev, data_entropy, data_iqr]
+            stats = [data_max, data_min, data_iqr] #data_mean, data_gmean, data_median, data_stdev, data_entropy, data_iqr]
             #stats = minmax_scale(stats)
             stats_data.append(",".join([str(param) for param in stats]))
         
         df = df.append({'label' : label, 'stats_data' : '$'.join(stats_data)}, ignore_index = True)
     
-    df = df.sample(frac=1).reset_index(drop=True)
-    df.to_csv('csv/' + dest)
+
+    print(labels)
+    new_df = pd.DataFrame(columns = ["label","stats_data"])
+    for label in labels:
+        data = df.loc[df['label'] == label]
+        ds = data.sample(154)
+        new_df = new_df.append(ds)
+
+    new_df = new_df.sample(frac=1).reset_index(drop=True)
+    new_df.to_csv('csv/' + dest)
     print("csv/" + dest + " created!")
 
 '''
@@ -129,4 +140,4 @@ def constructTripletDatasetCSV(root_dir, name):
 if __name__ == '__main__':
     constructDatasetCSV("../Signals/perfect/", dataset_name = "dataset-perfect4.csv")
     constructRawSignalValuesCSV('dataset-perfect4.csv', 'perfect-raw4.csv')
-    constructStatsDataset(source = 'perfect-raw4.csv', dest = 'perfect-stats2class.csv')
+    constructStatsDataset(source = 'perfect-raw4.csv', dest = '6-minmax-test.csv')

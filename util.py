@@ -4,6 +4,7 @@ import math
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
 
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.manifold import TSNE
@@ -78,52 +79,119 @@ def knn(X, y,  k = 3):
     return neigh
 
 
-def visualize(X, y, distinct_labels, name = "tsne.png", subtitle = "Data"):
+def visualize(X, y, three_d = False, test = False, subtitle = "Data"):
     X = np.array(X)
     y = np.array(y)
-    #print("Visualizing...")
-    #log.info('Visualising.')
-    tsne = TSNE(random_state = 2334)
+    tsne = TSNE(3 if three_d else 2, random_state = 2334)
     train_tsne_embeds = tsne.fit_transform(X)
-    return scatter(train_tsne_embeds, y, name, subtitle)
+
+    #if test:
+    #    return scatter_test(train_tsne_embeds, y, three_d, subtitle)
+
+    return scatter(train_tsne_embeds, y, three_d, subtitle)
 
 
 import torchvision
 import PIL.Image
 from torchvision.transforms import ToTensor
+from mpl_toolkits.mplot3d import Axes3D
 
-def scatter(x, labels, name, subtitle=None):
-    distinct_labels = ["bacillus_anthracis", "ecoli", "pseudomonas_koreensis", "pantonea_agglomerans", "yersinia_pestis", "klebsiella_pneumoniae"]
-    #distinct_labels = ["bla", "sin", "cos", "tan"]
-    #log.info('Scattering.')
-    palette = np.array(sns.color_palette("hls", 10))
-    colors = []
-    for label in labels:
-        colors.append(palette[label])
-  
-    f = plt.figure(figsize=(8, 8))
-    ax = plt.subplot(aspect='equal')
-    plt.title(subtitle)
 
-    sc = ax.scatter(x[:,0], x[:,1], s = 40,  c=colors)
-    ax.axis('off')
-    ax.axis('tight')
-    
-    txts = []
-    
-    for i, label in enumerate(distinct_labels):
-        xtext, ytext = np.median(x[labels == i, :], axis=0)
-        if np.isnan(xtext) or np.isnan(ytext):
-            continue
-        txt = ax.text(xtext, ytext, label, fontsize=24)
+distinct_labels = ["bacillus_anthracis", "ecoli", "pseudomonas_koreensis", "pantonea_agglomerans", "yersinia_pestis", "klebsiella_pneumoniae"]
+palette = np.array(sns.hls_palette(6))
+colours = ListedColormap(palette)
+marker = "o"
 
-        txt.set_path_effects([
-            PathEffects.Stroke(linewidth=5, foreground="w"),
-            PathEffects.Normal()])
-        txts.append(txt)
+from matplotlib.lines import Line2D
+
+def scatter(x, labels, three_d = False, subtitle=None):
+    f = plt.figure(figsize=(8, 8), edgecolor='black')
+    ax = f.add_subplot(111,projection=('3d' if three_d else None))
+    if not three_d:
+        ax.axis('off')
     
-        
-    plt.savefig("figures/" + name)
+    classes = [(i,distinct_labels[i]) for i in set(labels)]
+    c = [palette[i] for i in labels]
+
+    values = labels
+    ax.scatter(x[:,0], x[:,1], s = 40, c = c)
+    #for label in labels:
+    #    idx = np.where(labels == label)
+    #    text_label = distinct_labels[label]
+    #    if three_d:
+    #        ax.scatter(x[idx,0], x[idx,1], x[idx,2],  marker = marker, linewidth=3,  label = text_label,s = 100,  facecolors='none', edgecolors = [colours.colors[label]])
+    #    else:
+    #        ax.scatter(x[idx,0], x[idx,1], marker = marker, linewidth=3, label = text_label, s = 100, facecolors='none', edgecolors = [colours.colors[label]])
+
+    custom_lines = []
+    cl = []
+    for i, label in classes:
+        custom_lines.append(Line2D([0], [0], color=palette[i], lw=4))
+        cl.append(label)
+
+    ax.legend(custom_lines, cl)
+
+    if not three_d:
+        ax.set_yticks([])
+        ax.set_xticks([])
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format = 'png')
+    buf.seek(0)
+
+    image = PIL.Image.open(buf)
+    image = ToTensor()(image)
+    return image
+
+from collections import OrderedDict
+def scatter_test(x, labels, three_d = False, subtitle=None):
+    train_size = int(0.7 * len(x))
+    test_size = len(x) - train_size
+
+    train_x, test_x = x[:train_size], x[train_size:]
+    train_labels, test_labels = labels[:train_size], labels[train_size:]
+
+    set_labels = set(labels)
+    classes = [distinct_labels[i] for i in set_labels]
+
+    test_palette = np.array(sns.hls_palette(6, l=.3, s=.8))
+    test_colours = ListedColormap(test_palette)
+
+    f = plt.figure(figsize=(8, 8), edgecolor='black')
+    ax = f.add_subplot(111, projection=('3d' if three_d else None))
+    if not three_d:
+        ax.axis('off')
+
+    train_x, train_y = train_x[:,0], train_x[:,1]
+    test_x, test_y, = test_x[:,0], test_x[:,1]
+
+    train_z = train_x[:,2] if three_d else 0
+    test_z = test_x[:,2] if three_d else 0
+
+    for label in set_labels:
+        idx_train = np.where(train_labels == label)
+        idx_test = np.where(test_labels == label)
+
+        x, y = train_x[idx_train], train_y[idx_train]
+        t_x, t_y  = test_x[idx_test], test_y[idx_test]
+        z = train_z[idx_train] if three_d else 0
+        t_z = test_z[idx_test] if three_d else 0
+
+        text_label = distinct_labels[label]
+        if three_d:
+            ax.scatter(x, y, z, marker = marker, linewidth=3, label = text_label, facecolors='none', s = 100,  edgecolors = [colours.colors[label]])
+            ax.scatter(t_x, t_y, t_z, marker = marker, linewidth=3, label = text_label + " test", facecolors='none',s = 100,  edgecolors = [test_colours.colors[label]])
+        else:
+            ax.scatter(x, y,  marker = marker, linewidth=3, label = text_label, facecolors='none',s = 100,  edgecolors = [colours.colors[label]])
+            ax.scatter(t_x, t_y,  marker = marker, linewidth=3, label = text_label + " test", facecolors='none', s = 100, edgecolors = [test_colours.colors[label]])
+
+    handles, labels = plt.gca().get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    plt.legend(by_label.values(), by_label.keys(), prop={'size': 20})
+
+    if not three_d:
+        ax.set_yticks([])
+        ax.set_xticks([])
     
     buf = io.BytesIO()
     plt.savefig(buf, format = 'png')
