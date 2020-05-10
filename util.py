@@ -80,6 +80,7 @@ def knn(X, y,  k = 3):
 
 
 def visualize(X, y, three_d = False, test = False, subtitle = "Data"):
+    print("Visualising...")
     X = np.array(X)
     y = np.array(y)
     tsne = TSNE(3 if three_d else 2, random_state = 2334)
@@ -97,7 +98,7 @@ from torchvision.transforms import ToTensor
 from mpl_toolkits.mplot3d import Axes3D
 
 
-distinct_labels = ["bacillus_anthracis", "ecoli", "pseudomonas_koreensis", "pantonea_agglomerans", "yersinia_pestis", "klebsiella_pneumoniae"]
+distinct_labels = ["bacillus_anthracis", "ecoli", "yersinia_pestis", "pseudomonas_koreensis", "pantonea_agglomerans", "klebsiella_pneumoniae"]
 palette = np.array(sns.hls_palette(6))
 colours = ListedColormap(palette)
 marker = "o"
@@ -105,16 +106,21 @@ marker = "o"
 from matplotlib.lines import Line2D
 
 def scatter(x, labels, three_d = False, subtitle=None):
-    f = plt.figure(figsize=(8, 8), edgecolor='black')
+    f = plt.figure( edgecolor='black')
     ax = f.add_subplot(111,projection=('3d' if three_d else None))
-    if not three_d:
-        ax.axis('off')
+    #if not three_d:
+    #ax.axis('off')
+    plt.tight_layout()
+    #print(len(labels))
     
     classes = [(i,distinct_labels[i]) for i in set(labels)]
     c = [palette[i] for i in labels]
 
     values = labels
-    ax.scatter(x[:,0], x[:,1], s = 40, c = c)
+    if not three_d:
+        ax.scatter(x[:,0], x[:,1], marker = "o", linewidth=1, facecolors=c, edgecolors=(0,0,0,1), s = 160, alpha = 0.3)
+    else:
+        ax.scatter(x[:,0], x[:,1], x[:,2],  marker = "o", linewidth=1, facecolors=c, edgecolors=(0,0,0,1), s = 160, alpha = 0.3)
     #for label in labels:
     #    idx = np.where(labels == label)
     #    text_label = distinct_labels[label]
@@ -129,11 +135,11 @@ def scatter(x, labels, three_d = False, subtitle=None):
         custom_lines.append(Line2D([0], [0], color=palette[i], lw=4))
         cl.append(label)
 
-    ax.legend(custom_lines, cl)
+    #ax.legend(custom_lines, cl, prop={'size': 20}, loc = "upper right")
 
-    if not three_d:
-        ax.set_yticks([])
-        ax.set_xticks([])
+    #if not three_d:
+    #ax.set_yticks([])
+    #ax.set_xticks([])
 
     buf = io.BytesIO()
     plt.savefig(buf, format = 'png')

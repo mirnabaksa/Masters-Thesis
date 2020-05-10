@@ -22,7 +22,7 @@ def constructDatasetCSV(root_dir, dataset_name):
         for sub_dir in listdir(root_dir):
             label = sub_dir
             labels.append(label)
-            #if (not ( label == "ecoli" or label == "pseudomonas_koreensis" or label == "pantonea_agglomerans" or label == "yersinia_pestis")):
+            #if (not ( label == "ecoli" or label == "pseudomonas_koreensis" or label == "pantonea_agglomerans" or label == "bacillus_anthracis")):
             #    continue
             
             target_dir = join(root_dir, sub_dir)
@@ -39,7 +39,7 @@ def constructRawSignalValuesCSV(dataset_csv,  name = 'raw_dataset.csv'):
     df_semantic = pd.read_csv('csv/' + dataset_csv) 
     column_names = ["label","raw_data"]
 
-    read_len = 30000
+    read_len = 100000
 
     df = pd.DataFrame(columns=column_names)
     for i in range(len(df_semantic)):
@@ -59,7 +59,7 @@ def constructRawSignalValuesCSV(dataset_csv,  name = 'raw_dataset.csv'):
 
 from sklearn.preprocessing import minmax_scale, normalize
 
-def constructStatsDataset(source = "raw_dataset.csv", dest = "stats_dataset.csv", chunk = 200):
+def constructStatsDataset(source = "raw_dataset.csv", dest = "stats_dataset.csv", chunk = 400):
     df_raw = pd.read_csv('csv/' + source)  
     column_names = ["label","stats_data"]
     df = pd.DataFrame(columns=column_names)
@@ -88,7 +88,7 @@ def constructStatsDataset(source = "raw_dataset.csv", dest = "stats_dataset.csv"
             data_max, data_min = max(data_chunk), min(data_chunk)
             #data_mod = mode(data_chunk)[0][0]
             #data_skew = skew(data_chunk)
-            stats = [data_max, data_min, data_iqr] #data_mean, data_gmean, data_median, data_stdev, data_entropy, data_iqr]
+            stats = [data_mean, data_gmean, data_median, data_stdev, data_entropy, data_iqr]
             #stats = minmax_scale(stats)
             stats_data.append(",".join([str(param) for param in stats]))
         
@@ -97,9 +97,16 @@ def constructStatsDataset(source = "raw_dataset.csv", dest = "stats_dataset.csv"
 
     print(labels)
     new_df = pd.DataFrame(columns = ["label","stats_data"])
+    lens = []
     for label in labels:
         data = df.loc[df['label'] == label]
-        ds = data.sample(154)
+        lens.append(len(data))
+
+    min_len = min(lens)
+    print(min_len)
+    for label in labels:
+        data = df.loc[df['label'] == label]
+        ds = data.sample(min_len)
         new_df = new_df.append(ds)
 
     new_df = new_df.sample(frac=1).reset_index(drop=True)
@@ -140,4 +147,4 @@ def constructTripletDatasetCSV(root_dir, name):
 if __name__ == '__main__':
     constructDatasetCSV("../Signals/perfect/", dataset_name = "dataset-perfect4.csv")
     constructRawSignalValuesCSV('dataset-perfect4.csv', 'perfect-raw4.csv')
-    constructStatsDataset(source = 'perfect-raw4.csv', dest = '6-minmax-test.csv')
+    constructStatsDataset(source = 'perfect-raw4.csv', dest = 'perfect-stats-6class-test.csv')

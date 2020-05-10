@@ -290,14 +290,19 @@ class TripletConvolutionalEncoder(nn.Module):
         '''
 
         self.encoder = nn.Sequential(
-            nn.Conv1d(in_size, 8, 3,  padding = 1),
+            nn.Conv1d(in_size, 16, 3,  padding = 1),
             nn.Tanh(),
 
-            nn.Conv1d(8, 16, 3, padding = 1),
+            nn.Conv1d(16, 32, 3, padding = 1),
+            nn.Tanh(),
+            nn.Dropout(0.1),
+
+            nn.Conv1d(32, 48, 3, padding = 1),
             nn.Tanh(),
             nn.MaxPool1d(2),
+            nn.Dropout(0.3),
 
-            nn.Conv1d(16, 1, 3, stride = 3, padding = 1),
+            nn.Conv1d(48, 1, 3, stride = 3, padding = 1),
             nn.Tanh(),
             nn.Dropout(0.5),
 

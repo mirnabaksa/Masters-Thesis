@@ -38,7 +38,7 @@ class TripletStatsDataset(Dataset):
 
         self.data = pd.DataFrame(columns = ["anchor", "positive", "negative", "label"])
 
-        num_samples = 5
+        num_samples = 7
         for stats, label in self.flat_data.values.tolist():
             for other_label in self.get_distinct_labels():
                 if label == other_label:
@@ -50,10 +50,13 @@ class TripletStatsDataset(Dataset):
                 if pos.empty or neg.empty:
                     continue
                     
-                pos = pos.sample(num_samples)
-                neg = neg.sample(num_samples)
+                #print(len(pos))
+                #print(len(neg))
                 
-                for i in range(num_samples):
+                pos = pos.sample(min(len(pos),num_samples))
+                neg = neg.sample(min(len(neg),num_samples))
+                
+                for i in range(min(len(pos),len(neg))):
                     positive, labp = pos.values[i]
                     negative, labn = neg.values[i]
                     self.data = self.data.append({"anchor" : stats, "positive" : positive, "negative" : negative, "label" : label}, ignore_index = True)
@@ -79,6 +82,7 @@ class StatsSubsetDataset(Dataset):
         self.subset = subset
         self.n = len(subset)
         self.n_stats = len(subset[0][0][0])
+        print(self.n_stats)
         self.seq2seq = seq2seq
         self.wrapped = wrapped
 
@@ -164,7 +168,7 @@ class StatsDataset(Dataset):
 
         for i in range(1, len(self.reference)):
             index, label, data = self.reference.loc[i]
-            data = [[float(mean), float(stdev), float(iqr)] for mean, gmean,  med, stdev, entropy, iqr in [line.split(",") for line in data.split("$")]]
+            data = [[float(mean), float(med), float(stdev), float(iqr)] for mean, gmean,  med, stdev, entropy, iqr in [line.split(",") for line in data.split("$")]]
             self.df = self.df.append({"data" : data, "label" : label}, ignore_index = True)
         self.n = len(self.df)
 

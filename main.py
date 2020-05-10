@@ -21,7 +21,7 @@ def main(hparams):
     model = AutoencoderModel(hparams) if hparams.model == "auto" else TripletModel(hparams)
 
     # distributed backend has to be ddp!
-    save_dir = "test" if hparams.no_log else  "true/" + hparams.model + "-" + hparams.type
+    save_dir = "test" if hparams.no_log else  "reference/" + hparams.model + "-" + hparams.type
     logger = TestTubeLogger(save_dir = save_dir, name = str(hparams.num_classes) + "-classes")
     trainer = pl.Trainer(
         logger = logger,
@@ -31,6 +31,10 @@ def main(hparams):
     )
 
     trainer.fit(model)
+
+    #model = MyLightingModule.load_from_checkpoint(PATH)
+    #model.eval()
+    #y_hat = model(x)
 
     trainer = pl.Trainer(
         logger = logger,

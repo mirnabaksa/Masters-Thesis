@@ -200,25 +200,30 @@ class TripletModel(LightningModule):
         elif num_classes == 4:
             filename = "csv/perfect-stats-4class-test.csv"
         else:
-            filename = "csv/perfect-stats-test.csv"
+            filename = "csv/perfect-stats-6class-test.csv"
 
         print(self.hparams.num_classes)
         dataset = StatsDataset(filename)
 
-        train_size = int(0.7 * len(dataset)) #int(0.8 * len(dataset))
-        val_test_size = (len(dataset) - train_size) // 2
-        if((train_size + 2 * val_test_size) != len(dataset)):
-            train_size += 1
+        train_size = int(0.6 * len(dataset)) #int(0.8 * len(dataset))
+        val_test_size = int((len(dataset) - train_size) * 0.3)
+        test_size = len(dataset) - train_size - val_test_size
+
+        if((train_size + val_test_size + test_size) != len(dataset)):
+            train_size += (len(dataset) - val_test_size - test_size)
         
-        train_dataset, validation_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size,  val_test_size, val_test_size]) 
-        torch.save(train_dataset, "data/train-4-200.p")
-        torch.save(validation_dataset, "data/val-4-200.p")
-        torch.save(test_dataset, "data/test-4-200.p")
+
+        print(train_size, val_test_size, test_size)
+        train_dataset, validation_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size,  val_test_size, test_size]) 
+        torch.save(train_dataset, "data/train-4-4-200.p")
+        torch.save(validation_dataset, "data/val-4-4-200.p")
+        torch.save(test_dataset, "data/test-4-4-200.p")
         print(len(dataset))
         exit(0)
         '''
+
         
-        train_dataset, validation_dataset, test_dataset = torch.load("data/train-" + str(num_classes) + "-200.p"), torch.load("data/val-" + str(num_classes) + "-200.p"), torch.load("data/test-" + str(num_classes) + "-200.p")
+        train_dataset, validation_dataset, test_dataset = torch.load("data/train-" + str(num_classes) +  "-" + str(self.hparams.features) + "-200.p"), torch.load("data/val-" + str(num_classes) + "-" + str(self.hparams.features) +  "-200.p"), torch.load("data/test-" + str(num_classes) +  "-" + str(self.hparams.features)  + "-200.p")
 
         self.train_dataset = TripletStatsDataset(StatsSubsetDataset(train_dataset, wrapped = True, minmax = self.hparams.min_max))
         self.validation_dataset = TripletStatsDataset(StatsSubsetDataset(validation_dataset, wrapped = True, minmax = self.hparams.min_max))
@@ -262,19 +267,28 @@ class TripletModel(LightningModule):
             latents.extend(output['latent'])
             labels.extend(output['labels'])
 
+        #print(len(latents))
+
         train_size = int(0.7 * len(labels))
         test_size = len(labels) - train_size
+        print(train_size, test_size)
 
         train_latents, test_latents = latents[:train_size], latents[train_size:]
         train_labels, test_labels = labels[:train_size], labels[train_size:]
-        k = int(sqrt(len(train_latents)))
+        k = int(sqrt(len(latents)))
         if k%2 == 0:
             k += 1
+
+        
         print("Using k... ", k)
         self.logger.experiment.add_text("K", str(k))
         predictor = knn(train_latents, train_labels, k)
 
         predicted = predictor.predict(test_latents)
+        prob = predictor.predict_proba(test_latents)
+        #for i in range(len(prob)):
+        #    print(prob[i], test_labels[i]) 
+
         acc = metrics.accuracy_score(test_labels, predicted)
         print("calculated acc: ", acc)
         
@@ -296,15 +310,15 @@ class TripletModel(LightningModule):
             test = True,
             subtitle = self.hparams.model + " " + self.hparams.type)  
 
-        all_image = visualize(latents, 
-            labels, 
-            three_d = self.hparams.threeD,
-            test = False,
-            subtitle = self.hparams.model + " " + self.hparams.type)    
+        #all_image = visualize(latents, 
+        #    labels, 
+        #    three_d = self.hparams.threeD,
+        #    test = False,
+        #    subtitle = self.hparams.model + " " + self.hparams.type)    
 
         if self.logger:
             self.logger.experiment.add_image('test', image, self.current_epoch)
-            self.logger.experiment.add_image('test-all', all_image, self.current_epoch)
+            #self.logger.experiment.add_image('test-all', all_image, self.current_epoch)
 
 
             # reduce manually when using dp

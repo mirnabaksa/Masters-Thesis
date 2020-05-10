@@ -5,11 +5,11 @@ features,3
 num_layers,1
 hidden_size,16
 drop_prob,0.2
-bidirectional,False
+bidirectional,True
 min_max,False
 filters,16
 margin,0.2
-epochs,50
+epochs,60
 optimizer_name,adam
 batch_size,32
 plot_every,5
