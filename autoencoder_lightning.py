@@ -3,6 +3,7 @@ from argparse import ArgumentParser
 from collections import OrderedDict
 import pickle
 import numpy as np
+from math import sqrt
 
 import torch
 import torch.nn as nn
@@ -136,8 +137,9 @@ class AutoencoderModel(LightningModule):
                 labels.extend(output['label'])
 
             image = visualize(latents, 
-                labels, 
-                "train-tsne.png",
+                labels,  
+                self.hparams.threeD,
+                False, 
                 self.hparams.model + " " + self.hparams.type)
 
             if self.current_epoch == self.hparams.epochs - 1:
@@ -182,7 +184,8 @@ class AutoencoderModel(LightningModule):
             
             image = visualize(latents, 
                 labels, 
-                "val-tsne.png", 
+                self.hparams.threeD,
+                False,
                 self.hparams.model + " " + self.hparams.type)
 
             self.logger.experiment.add_image('validation', image, self.current_epoch)
@@ -231,34 +234,52 @@ class AutoencoderModel(LightningModule):
 
     def prepare_data(self):
         num_classes = self.hparams.num_classes
-        #if num_classes == 2:
-        #    filename = "csv/perfect-stats2class.csv"
-        #elif num_classes == 4:
-        #    filename = "csv/perfect-stats4class.csv"
-        #else:
-        #    filename = "csv/perfect-stats.csv"
-
-
-        #dataset = StatsDataset(filename)
-        #dataset = StatsTestDataset()
-        #train_size = int(0.7 * len(dataset)) 
-        #val_test_size = (len(dataset) - train_size) // 2
-        #log.info("Dataset sizes: " + str(train_size) + " " + str(val_test_size))
-
-        #if((train_size + 2 * val_test_size) != len(dataset)):
-        #    train_size += 1
-        #train_dataset, validation_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size,  val_test_size, val_test_size]) 
         
-        #self.train_dataset = train_dataset
-        #self.validation_dataset = validation_dataset
-        #self.test_dataset = test_dataset
-        #return
+        '''print("Num classes: ", self.hparams.num_classes)
+        if num_classes == 2:
+            filename = "csv/parsed/stats_dataset-2class.csv"
+        elif num_classes == 4:
+            filename = "csv/parsed/stats_dataset-4class.csv"
+        else:
+            filename = "csv/parsed/stats_dataset-6class.csv"
 
-        train_dataset, validation_dataset, test_dataset = torch.load("data/train-" + str(num_classes) + ".p"), torch.load("data/val-" + str(num_classes) + ".p"), torch.load("data/test-" + str(num_classes) + ".p")
+        dataset = StatsDataset(filename)
+
+        train_size = int(0.8 * len(dataset)) #int(0.8 * len(dataset))
+        val_test_size = int((len(dataset) - train_size) * 0.5)
+        test_size = len(dataset) - train_size - val_test_size
+
+        if((train_size + val_test_size + test_size) != len(dataset)):
+            train_size += (len(dataset) - val_test_size - test_size)
         
-        self.train_dataset = StatsSubsetDataset(train_dataset, wrapped = False, minmax = False)
-        self.validation_dataset = StatsSubsetDataset(validation_dataset, wrapped = False, minmax = False)
-        self.test_dataset = StatsSubsetDataset(test_dataset, wrapped = False, minmax = False)
+
+        print(train_size, val_test_size, test_size)
+        train_dataset, validation_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size,  val_test_size, test_size]) 
+        
+        #torch.save(train_dataset, "data/parsed/train-4-4-200.p")
+        #torch.save(validation_dataset, "data/parsed/val-4-4-200.p")
+        #torch.save(test_dataset, "data/parsed/test-4-4-200.p")
+        print(len(dataset))
+        
+        
+        #train_dataset, validation_dataset, test_dataset = torch.load("data/parsed/train-" + str(num_classes) +  "-" + str(self.hparams.features) + "-200.p"), \
+        #    torch.load("data/parsed/val-" + str(num_classes) + "-" + str(self.hparams.features) +  "-200.p"), \
+        #    torch.load("data/parsed/test-" + str(num_classes) +  "-" + str(self.hparams.features)  + "-200.p")
+
+        train_dataset = StatsSubsetDataset(train_dataset, wrapped = False, minmax = self.hparams.min_max)
+        validation_dataset = StatsSubsetDataset(validation_dataset, wrapped = False, minmax = self.hparams.min_max)
+        test_dataset = StatsSubsetDataset(test_dataset, wrapped = False, minmax = self.hparams.min_max)
+
+        pickle.dump(train_dataset, open("data/parsed/pickles/train-" + str(num_classes) + "-auto.p", "wb"))
+        pickle.dump(test_dataset,  open("data/parsed/pickles/val-" + str(num_classes) + "-auto.p", "wb"))
+        pickle.dump(validation_dataset,  open("data/parsed/pickles/test-" + str(num_classes) + "-auto.p", "wb"))
+        exit(0)
+        '''
+
+        self.train_dataset = pickle.load(open("data/parsed/pickles/train-" + str(num_classes) + "-auto.p", "rb"))
+        self.validation_dataset = pickle.load(open("data/parsed/pickles/val-" + str(num_classes) + "-auto.p", "rb"))
+        self.test_dataset = pickle.load(open("data/parsed/pickles/test-" + str(num_classes) + "-auto.p", "rb"))
+        print(len(self.train_dataset), len(self.validation_dataset), len(self.test_dataset))
 
         string = str(self.model)
         if self.hparams.type == "conv":
@@ -266,6 +287,7 @@ class AutoencoderModel(LightningModule):
             string = string.replace("True)", "True)<br>")
             string = string.replace("False)", "False)<br>")
         self.logger.experiment.add_text("model", string)
+
         
     def train_dataloader(self):
         return self.__dataloader(set="train")
@@ -308,15 +330,18 @@ class AutoencoderModel(LightningModule):
 
         train_size = int(0.8 * len(latents))
         test_size = len(latents) - train_size
-        print(train_size, test_size)
 
         train_latents, test_latents = latents[:train_size], latents[train_size:]
         train_labels, test_labels = labels[:train_size], labels[train_size:]
-        print(latents)
-        print(train_latents)
-        print(test_latents)
-        print(len(train_latents), len(test_latents))
-        predictor = knn(train_latents, train_labels, self.hparams.k_nn)
+        k = int(sqrt(len(latents)))
+        if k%2 == 0:
+            k += 1
+
+        
+        print("Using k... ", k)
+        self.logger.experiment.add_text("K", str(k))
+
+        predictor = knn(train_latents, train_labels, k)
 
         predicted = predictor.predict(test_latents)
         correct = (test_labels == predicted).sum()
@@ -328,8 +353,9 @@ class AutoencoderModel(LightningModule):
 
         image = visualize(latents, 
             labels, 
-            "tsne-test.png",
-            self.hparams.model + " " + self.hparams.type)   
+            three_d = self.hparams.threeD,
+            test = True,
+            subtitle = self.hparams.model + " " + self.hparams.type)    
         
         if self.logger:
             self.logger.experiment.add_image('test', image, self.current_epoch)
@@ -342,4 +368,3 @@ class AutoencoderModel(LightningModule):
         tqdm_dict = {'test_acc': test_acc, 'step': self.current_epoch}
         result = {'progress_bar': tqdm_dict, 'log': tqdm_dict, 'test_acc': test_acc}
         return result
-

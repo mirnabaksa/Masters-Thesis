@@ -272,24 +272,24 @@ class TripletConvolutionalEncoder(nn.Module):
             nn.BatchNorm1d(1),
         )
 
-        #
-         self.encoder = nn.Sequential(
-            nn.Conv1d(in_size, 8, 3,  padding = 1),
+        '''
+        self.encoder = nn.Sequential(
+            nn.Conv1d(in_size, 16, 3,  padding = 1),
             nn.Tanh(),
 
-            nn.Conv1d(8, 16, 3, padding = 1),
+            nn.Conv1d(16, 32, 3, stride = 1,  padding = 1),
+            nn.Tanh(),
+
+            nn.Conv1d(32, 1, 3, stride = 1, padding = 1),
             nn.Tanh(),
             nn.MaxPool1d(2),
 
-            nn.Conv1d(16, 1, 3, stride = 3, padding = 1),
-            nn.Tanh(),
-
-            nn.Linear(25, 4)
+            nn.Linear(25, self.hidden_size)
         )
-        )
-        '''
+        
+        
 
-        self.encoder = nn.Sequential(
+        '''self.encoder = nn.Sequential(
             nn.Conv1d(in_size, 16, 3,  padding = 1),
             nn.Tanh(),
 
@@ -307,7 +307,7 @@ class TripletConvolutionalEncoder(nn.Module):
             nn.Dropout(0.5),
 
             nn.Linear(25, self.hidden_size)
-        )
+        )'''
 
   
     def forward(self, a, p, n):
@@ -317,9 +317,9 @@ class TripletConvolutionalEncoder(nn.Module):
         return enc_a, enc_p, enc_n
 
     def get_latent(self, input):
-        
         batch_size, L, features = input.shape
         input = input.view(batch_size, features, L)
+
         y = self.encoder(input)
         y = y.view(batch_size, self.hidden_size, 1)
         

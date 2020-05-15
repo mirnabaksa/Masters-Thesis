@@ -4,12 +4,14 @@ from collections import OrderedDict
 import pickle
 from sklearn import metrics
 from math import sqrt
+import pickle
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import optim
 from torch.utils.data import DataLoader
+from torch.nn.utils.rnn import pad_sequence
 
 
 from pytorch_lightning import Callback
@@ -37,7 +39,6 @@ class TripletModel(LightningModule):
 
         # build model
         self.__build_model()
-
 
 
     # ---------------------
@@ -176,37 +177,55 @@ class TripletModel(LightningModule):
         #scheduler = None
         return [optimizer] , [scheduler]
 
+    
+    
+
     def __dataloader(self, set):
         # when using multi-node (ddp) we need to add the  datasampler
+
+        '''def collate(input):
+            a, p, n, labels = map(list, zip(*input))
+            a, l_a = get_input(a)
+            p, l_p = get_input(p)
+            n, l_n = get_input(n)
+            print("in collate")
+    
+            return a, p, n, l_a, l_p, l_n, labels
+
+        def get_input(in_batch):
+            padded = pad_sequence(in_batch, batch_first = True, padding_value = 0)
+            lens = [len(x) for x in in_batch]
+            return padded, torch.IntTensor(lens)'''
+
  
         dataset = self.train_dataset
         if set == "validation":
             dataset = self.validation_dataset
         elif set == "test":
             dataset = self.test_dataset
-
         loader = DataLoader(
             dataset=dataset,
             batch_size=self.hparams.batch_size,
-            num_workers = 0,
-            drop_last = True)
+            num_workers = 3)
 
         return loader
 
+
     def prepare_data(self):
         num_classes = self.hparams.num_classes
+        
+        print("Num classes: ", self.hparams.num_classes)
         '''if num_classes == 2:
-            filename = "csv/perfect-stats-2class-test.csv"
+            filename = "csv/parsed/stats_dataset-2class-400.csv"
         elif num_classes == 4:
-            filename = "csv/perfect-stats-4class-test.csv"
+            filename = "csv/parsed/stats_dataset-4class-400.csv"
         else:
-            filename = "csv/perfect-stats-6class-test.csv"
+            filename = "csv/parsed/stats_dataset-6class-400.csv"
 
-        print(self.hparams.num_classes)
         dataset = StatsDataset(filename)
 
-        train_size = int(0.6 * len(dataset)) #int(0.8 * len(dataset))
-        val_test_size = int((len(dataset) - train_size) * 0.3)
+        train_size = int(0.8 * len(dataset)) #int(0.8 * len(dataset))
+        val_test_size = int((len(dataset) - train_size) * 0.5)
         test_size = len(dataset) - train_size - val_test_size
 
         if((train_size + val_test_size + test_size) != len(dataset)):
@@ -215,19 +234,30 @@ class TripletModel(LightningModule):
 
         print(train_size, val_test_size, test_size)
         train_dataset, validation_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size,  val_test_size, test_size]) 
-        torch.save(train_dataset, "data/train-4-4-200.p")
-        torch.save(validation_dataset, "data/val-4-4-200.p")
-        torch.save(test_dataset, "data/test-4-4-200.p")
+        
+        #torch.save(train_dataset, "data/parsed/train-4-4-200.p")
+        #torch.save(validation_dataset, "data/parsed/val-4-4-200.p")
+        #torch.save(test_dataset, "data/parsed/test-4-4-200.p")
         print(len(dataset))
-        exit(0)
+        
+        
+        #train_dataset, validation_dataset, test_dataset = torch.load("data/parsed/train-" + str(num_classes) +  "-" + str(self.hparams.features) + "-200.p"), \
+        #    torch.load("data/parsed/val-" + str(num_classes) + "-" + str(self.hparams.features) +  "-200.p"), \
+        #    torch.load("data/parsed/test-" + str(num_classes) +  "-" + str(self.hparams.features)  + "-200.p")
+
+        train_dataset = TripletStatsDataset(StatsSubsetDataset(train_dataset, wrapped = True, minmax = self.hparams.min_max))
+        validation_dataset = TripletStatsDataset(StatsSubsetDataset(validation_dataset, wrapped = True, minmax = self.hparams.min_max))
+        test_dataset = TripletStatsDataset(StatsSubsetDataset(test_dataset, wrapped = True, minmax = self.hparams.min_max))
+
+        pickle.dump(train_dataset, open("data/parsed/pickles/true/train-" + str(num_classes) + ".p", "wb"))
+        pickle.dump(test_dataset,  open("data/parsed/pickles/true/val-" + str(num_classes) + ".p", "wb"))
+        pickle.dump(validation_dataset,  open("data/parsed/pickles/true/test-" + str(num_classes) + ".p", "wb"))
+        #exit(0)
         '''
 
-        
-        train_dataset, validation_dataset, test_dataset = torch.load("data/train-" + str(num_classes) +  "-" + str(self.hparams.features) + "-200.p"), torch.load("data/val-" + str(num_classes) + "-" + str(self.hparams.features) +  "-200.p"), torch.load("data/test-" + str(num_classes) +  "-" + str(self.hparams.features)  + "-200.p")
-
-        self.train_dataset = TripletStatsDataset(StatsSubsetDataset(train_dataset, wrapped = True, minmax = self.hparams.min_max))
-        self.validation_dataset = TripletStatsDataset(StatsSubsetDataset(validation_dataset, wrapped = True, minmax = self.hparams.min_max))
-        self.test_dataset = TripletStatsDataset(StatsSubsetDataset(test_dataset, wrapped = True, minmax = self.hparams.min_max))
+        self.train_dataset = pickle.load(open("data/parsed/pickles/true/train-" + str(num_classes) + ".p", "rb"))
+        self.validation_dataset = pickle.load(open("data/parsed/pickles/true/val-" + str(num_classes) + ".p", "rb"))
+        self.test_dataset = pickle.load(open("data/parsed/pickles/true/test-" + str(num_classes) + ".p", "rb"))
 
         string = str(self.model)
         if self.hparams.type == "conv":
@@ -235,6 +265,7 @@ class TripletModel(LightningModule):
             string = string.replace("True)", "True)<br>")
             string = string.replace("False)", "False)<br>")
         self.logger.experiment.add_text("model", string)
+      
 
 
     def train_dataloader(self):
@@ -269,7 +300,7 @@ class TripletModel(LightningModule):
 
         #print(len(latents))
 
-        train_size = int(0.7 * len(labels))
+        train_size = int(0.8 * len(labels))
         test_size = len(labels) - train_size
         print(train_size, test_size)
 
@@ -328,32 +359,5 @@ class TripletModel(LightningModule):
         tqdm_dict = {'test_acc': test_acc}
         result = {'progress_bar': tqdm_dict, 'log': tqdm_dict, 'test_acc': test_acc}
         return result
-
-
-    @staticmethod
-    def add_model_specific_args(parent_parser, root_dir):  
-        parser = ArgumentParser(parents=[parent_parser])
-
-        # param overwrites
-        # parser.set_defaults(gradient_clip_val=5.0)
-
-        # network params
-        parser.add_argument('--model', default="lstm", type=str)
-        parser.add_argument('--features', default=3, type=int)
-        parser.add_argument('--num_layers', default=1, type=int)
-        parser.add_argument('--hidden_size', default=10, type=int)
-        parser.add_argument('--drop_prob', default=0.2, type=float)
-        #parser.add_argument('--learning_rate', default=0.001, type=float)
-        parser.add_argument('--bidirectional', default = False, type=bool)
-
-        # training params (opt)
-        parser.add_argument('--epochs', default=100, type=int)
-        parser.add_argument('--optimizer_name', default='adam', type=str)
-        parser.add_argument('--batch_size', default=64, type=int)
-
-        parser.add_argument('--plot_every', default=5, type=int)
-
-        parser.add_argument('--num_classes', default=2, type=int)
-        return parser
 
 

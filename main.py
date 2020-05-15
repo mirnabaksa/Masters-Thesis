@@ -18,6 +18,7 @@ np.random.seed(SEED)
 random.seed(SEED)
 
 def main(hparams):
+    print(hparams)
     model = AutoencoderModel(hparams) if hparams.model == "auto" else TripletModel(hparams)
 
     # distributed backend has to be ddp!
@@ -55,7 +56,7 @@ if __name__ == '__main__':
 
     # network params
     parser.add_argument('--type', default="lstm", type=str)
-    parser.add_argument('--features', default=3, type=int)
+    parser.add_argument('--features', default=4, type=int)
     parser.add_argument('--num_layers', default=1, type=int)
     parser.add_argument('--hidden_size', default=10, type=int)
     parser.add_argument('--drop_prob', default=0.2, type=float)

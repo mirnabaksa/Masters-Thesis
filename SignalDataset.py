@@ -38,7 +38,7 @@ class TripletStatsDataset(Dataset):
 
         self.data = pd.DataFrame(columns = ["anchor", "positive", "negative", "label"])
 
-        num_samples = 7
+        num_samples = 2
         for stats, label in self.flat_data.values.tolist():
             for other_label in self.get_distinct_labels():
                 if label == other_label:
@@ -81,6 +81,7 @@ class StatsSubsetDataset(Dataset):
     def __init__(self, subset, wrapped = False, seq2seq = False, minmax = False):
         self.subset = subset
         self.n = len(subset)
+        print(self.n)
         self.n_stats = len(subset[0][0][0])
         print(self.n_stats)
         self.seq2seq = seq2seq
@@ -165,10 +166,10 @@ class StatsDataset(Dataset):
     def __init__(self, reference_csv, raw = True):
         self.reference = pd.read_csv(reference_csv, delimiter = ",", header = None)
         self.df = pd.DataFrame(columns = ["data", "label"])
-
+        #self.reference = self.reference[:100]
         for i in range(1, len(self.reference)):
             index, label, data = self.reference.loc[i]
-            data = [[float(mean), float(med), float(stdev), float(iqr)] for mean, gmean,  med, stdev, entropy, iqr in [line.split(",") for line in data.split("$")]]
+            data = [[float(mean), float(med), float(stdev), float(iqr)] for mean, med, stdev, iqr in [line.split(",") for line in data.split("$")]]
             self.df = self.df.append({"data" : data, "label" : label}, ignore_index = True)
         self.n = len(self.df)
 

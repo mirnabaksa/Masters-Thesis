@@ -118,7 +118,7 @@ def scatter(x, labels, three_d = False, subtitle=None):
 
     values = labels
     if not three_d:
-        ax.scatter(x[:,0], x[:,1], marker = "o", linewidth=1, facecolors=c, edgecolors=(0,0,0,1), s = 160, alpha = 0.3)
+        ax.scatter(x[:,0], x[:,1], marker = "o", linewidth=1, facecolors=c, edgecolors=(0,0,0,1), s = 50, alpha = 0.3)
     else:
         ax.scatter(x[:,0], x[:,1], x[:,2],  marker = "o", linewidth=1, facecolors=c, edgecolors=(0,0,0,1), s = 160, alpha = 0.3)
     #for label in labels:
