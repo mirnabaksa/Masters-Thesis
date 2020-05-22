@@ -74,7 +74,7 @@ def showDataPlot(X, filename = "data", title = None):
      
 def knn(X, y,  k = 3):
     print("Fitting KNN...")
-    neigh = KNeighborsClassifier(n_neighbors = k)
+    neigh = KNeighborsClassifier(n_neighbors = k, weights = "distance")
     neigh.fit(X, y)
     return neigh
 
@@ -99,7 +99,8 @@ from mpl_toolkits.mplot3d import Axes3D
 
 
 distinct_labels = ["bacillus_anthracis", "ecoli", "yersinia_pestis", "pseudomonas_koreensis", "pantonea_agglomerans", "klebsiella_pneumoniae"]
-palette = np.array(sns.hls_palette(6))
+#distinct_labels = [0,1,2,3]
+palette = np.array(sns.hls_palette(len(distinct_labels)))
 colours = ListedColormap(palette)
 marker = "o"
 
@@ -131,11 +132,11 @@ def scatter(x, labels, three_d = False, subtitle=None):
 
     custom_lines = []
     cl = []
-    for i, label in classes:
+    for i, label in enumerate(classes):
         custom_lines.append(Line2D([0], [0], color=palette[i], lw=4))
         cl.append(label)
 
-    #ax.legend(custom_lines, cl, prop={'size': 20}, loc = "upper right")
+    ax.legend(custom_lines, cl, prop={'size': 10}, loc = "upper right")
 
     #if not three_d:
     #ax.set_yticks([])
@@ -199,6 +200,37 @@ def scatter_test(x, labels, three_d = False, subtitle=None):
         ax.set_yticks([])
         ax.set_xticks([])
     
+    buf = io.BytesIO()
+    plt.savefig(buf, format = 'png')
+    buf.seek(0)
+
+    image = PIL.Image.open(buf)
+    image = ToTensor()(image)
+    return image
+
+
+def plotOutput(in_vec, out_vec, target_vec):
+    means_in = []
+    means_out = []
+    means_target = []
+
+    #stdev_in = []
+    #stdev_out = []
+    for i in range(len(in_vec)):
+        means_in.append(in_vec[i][0])
+        means_out.append(out_vec[i][0])
+        means_target.append(target_vec[i][0])
+        #stdev_in.append(in_vec[i][1])
+        #stdev_out.append(out_vec[i][1])
+
+    x = np.arange(0, len(means_in))
+    plt.figure(figsize=(15,4))
+    plt.plot(x, means_in,  "b")
+    plt.plot(x, means_out, "r")
+    plt.plot(x, means_target, "g")
+    plt.legend(["in", "out", "target"])
+    plt.title("means")
+
     buf = io.BytesIO()
     plt.savefig(buf, format = 'png')
     buf.seek(0)

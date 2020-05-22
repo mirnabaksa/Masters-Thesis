@@ -142,6 +142,10 @@ def constructStatsDataset(root_dir = "raw_dataset.csv", dataset_name = "stats_da
     print("csv/" + dataset_name + " created!")
 
 
+
+def constructTripletDatasetFromEncodings():
+
+
 if __name__ == '__main__':
     #parser = ArgumentParser(add_help=False)
     #parser.add_argument('--filename', type=str)
@@ -151,4 +155,4 @@ if __name__ == '__main__':
     #readFasta(params.filename, params.outfile)
     #constructDatasetCSV("../Signals/parsed_true/", dataset_name = "parsed/dataset-reads.csv")
     #constructRawSignalValuesCSV(root_dir = "parsed/dataset-reads.csv", dataset_name = 'parsed/raw_dataset.csv')
-    constructStatsDataset(root_dir = 'parsed/raw_dataset.csv', dataset_name = 'parsed/stats_dataset-6class-400.csv')
+    #constructStatsDataset(root_dir = 'parsed/raw_dataset.csv', dataset_name = 'parsed/stats_dataset-6class-400.csv')

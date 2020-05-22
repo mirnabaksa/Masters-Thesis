@@ -14,12 +14,14 @@ from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pad_sequence
 
 
+
+
 from pytorch_lightning import Callback
 from pytorch_lightning import _logger as log
 from pytorch_lightning.core import LightningModule
 
 
-from SignalDataset import StatsDataset, StatsSubsetDataset, TripletStatsDataset
+from SignalDataset import StatsDataset, StatsSubsetDataset, TripletStatsDataset, StatsTestDataset
 from util import knn, visualize, showPlot
 from models import TripletLSTMEncoder, TripletConvolutionalEncoder
 
@@ -94,7 +96,7 @@ class TripletModel(LightningModule):
 
     ## method not called on last epoch!
     def training_epoch_end(self, outputs):
-        if self.logger and (self.current_epoch == 0 or self.current_epoch % self.hparams.plot_every == 0 or self.current_epoch == self.hparams.epochs - 1):
+        if self.logger and (self.current_epoch % self.hparams.plot_every == 0 or self.current_epoch == self.hparams.epochs - 1):
             latents = []
             labels = []
             for output in outputs:
@@ -137,7 +139,7 @@ class TripletModel(LightningModule):
         # if returned a scalar from validation_step, outputs is a list of tensor scalars
         # we return just the average in this case (if we want)
         # return torch.stack(outputs).mean()
-        if self.logger and (self.current_epoch == 0 or self.current_epoch % self.hparams.plot_every == 0 or self.current_epoch == self.hparams.epochs - 1):
+        if self.logger and (self.current_epoch % self.hparams.plot_every == 0 or self.current_epoch == self.hparams.epochs - 1):
             latents = []
             labels = []
             for output in outputs:
@@ -231,19 +233,8 @@ class TripletModel(LightningModule):
         if((train_size + val_test_size + test_size) != len(dataset)):
             train_size += (len(dataset) - val_test_size - test_size)
         
-
         print(train_size, val_test_size, test_size)
         train_dataset, validation_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size,  val_test_size, test_size]) 
-        
-        #torch.save(train_dataset, "data/parsed/train-4-4-200.p")
-        #torch.save(validation_dataset, "data/parsed/val-4-4-200.p")
-        #torch.save(test_dataset, "data/parsed/test-4-4-200.p")
-        print(len(dataset))
-        
-        
-        #train_dataset, validation_dataset, test_dataset = torch.load("data/parsed/train-" + str(num_classes) +  "-" + str(self.hparams.features) + "-200.p"), \
-        #    torch.load("data/parsed/val-" + str(num_classes) + "-" + str(self.hparams.features) +  "-200.p"), \
-        #    torch.load("data/parsed/test-" + str(num_classes) +  "-" + str(self.hparams.features)  + "-200.p")
 
         train_dataset = TripletStatsDataset(StatsSubsetDataset(train_dataset, wrapped = True, minmax = self.hparams.min_max))
         validation_dataset = TripletStatsDataset(StatsSubsetDataset(validation_dataset, wrapped = True, minmax = self.hparams.min_max))
@@ -254,11 +245,32 @@ class TripletModel(LightningModule):
         pickle.dump(validation_dataset,  open("data/parsed/pickles/true/test-" + str(num_classes) + ".p", "wb"))
         #exit(0)
         '''
-
-        self.train_dataset = pickle.load(open("data/parsed/pickles/true/train-" + str(num_classes) + ".p", "rb"))
+     
+        '''self.train_dataset = pickle.load(open("data/parsed/pickles/true/train-" + str(num_classes) + ".p", "rb"))
         self.validation_dataset = pickle.load(open("data/parsed/pickles/true/val-" + str(num_classes) + ".p", "rb"))
-        self.test_dataset = pickle.load(open("data/parsed/pickles/true/test-" + str(num_classes) + ".p", "rb"))
+        self.test_dataset = pickle.load(open("data/parsed/pickles/true/test-" + str(num_classes) + ".p", "rb"))'''
+        #self.train_dataset = TripletStatsDataset(pickled="autoencoder/train.p")
+        #self.validation_dataset = TripletStatsDataset(pickled="autoencoder/val.p")
+        #self.test_dataset = TripletStatsDataset(pickled="autoencoder/test.p")
+        #return
 
+        dataset = StatsTestDataset()
+        train_size = int(0.8 * len(dataset)) #int(0.8 * len(dataset))
+        val_test_size = int((len(dataset) - train_size) * 0.5)
+        test_size = len(dataset) - train_size - val_test_size
+
+        if((train_size + val_test_size + test_size) != len(dataset)):
+            train_size += (len(dataset) - val_test_size - test_size)
+        
+        print(train_size, val_test_size, test_size)
+        train_dataset, validation_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size,  val_test_size, test_size]) 
+
+        self.train_dataset = TripletStatsDataset(StatsSubsetDataset(train_dataset, wrapped = True, minmax = self.hparams.min_max))
+        self.validation_dataset = TripletStatsDataset(StatsSubsetDataset(validation_dataset, wrapped = True, minmax = self.hparams.min_max))
+        self.test_dataset = TripletStatsDataset(StatsSubsetDataset(test_dataset, wrapped = True, minmax = self.hparams.min_max))
+        return
+    
+     
         string = str(self.model)
         if self.hparams.type == "conv":
             string = string.replace("))", "))<br>")
@@ -288,7 +300,6 @@ class TripletModel(LightningModule):
 
         return output
 
-
     def test_epoch_end(self, outputs):
         log.info('Fitting predictor...')
         latents = []
@@ -314,19 +325,19 @@ class TripletModel(LightningModule):
         print("Using k... ", k)
         self.logger.experiment.add_text("K", str(k))
         predictor = knn(train_latents, train_labels, k)
-
         predicted = predictor.predict(test_latents)
-        prob = predictor.predict_proba(test_latents)
+        #prob = predictor.predict_proba(test_latents)
         #for i in range(len(prob)):
         #    print(prob[i], test_labels[i]) 
 
         acc = metrics.accuracy_score(test_labels, predicted)
         print("calculated acc: ", acc)
-        
+
         correct = 0
         for i in range(len(predicted)):
             if test_labels[i] == predicted[i]:
                 correct += 1
+
     
         all = len(test_labels)
         test_acc = correct/all
@@ -341,16 +352,8 @@ class TripletModel(LightningModule):
             test = True,
             subtitle = self.hparams.model + " " + self.hparams.type)  
 
-        #all_image = visualize(latents, 
-        #    labels, 
-        #    three_d = self.hparams.threeD,
-        #    test = False,
-        #    subtitle = self.hparams.model + " " + self.hparams.type)    
-
         if self.logger:
             self.logger.experiment.add_image('test', image, self.current_epoch)
-            #self.logger.experiment.add_image('test-all', all_image, self.current_epoch)
-
 
             # reduce manually when using dp
         #if self.trainer.use_dp or self.trainer.use_ddp2:

@@ -20,8 +20,11 @@ import torchvision.transforms as transforms
 from torch.utils.tensorboard import SummaryWriter
 
 from SignalDataset import StatsDataset, StatsSubsetDataset, TripletStatsDataset, TestDataset, StatsTestDataset
-from util import knn, visualize, showPlot
-from models import LSTMAutoEncoder, ConvolutionalAutoencoder
+from util import knn, visualize, showPlot, plotOutput
+from models import LSTMAutoEncoder, ConvolutionalAutoencoder, VariationalAutoencoder
+
+from sklearn.cluster import KMeans
+
 
 class AutoencoderModel(LightningModule):
 
@@ -41,6 +44,8 @@ class AutoencoderModel(LightningModule):
 
         # build model
         self.__build_model()
+        self.in_vec = None
+        self.in_vec_train = None
         
 
 
@@ -57,10 +62,11 @@ class AutoencoderModel(LightningModule):
                 bidirectional = self.hparams.bidirectional, 
                 num_layers = self.hparams.num_layers, 
                 dropout = self.hparams.drop_prob)
-        else:
+        elif self.hparams.type == "conv":
             self.model = ConvolutionalAutoencoder(self.hparams.features, filters = self.hparams.filters)
-
-        
+        elif self.hparams.type == "vae":
+            self.model = VariationalAutoencoder(self.hparams.features, self.hparams.hidden_size, self.hparams.features)
+       
 
     # ---------------------
     # TRAINING
@@ -74,31 +80,6 @@ class AutoencoderModel(LightningModule):
         return self.model.get_latent(input)
 
     def loss(self, input, target, latents, labels):
-        #d = nn.PairwiseDistance(p=2)
-        #print(labels)
-        #latents = torch.tensor([[1, 0.0], [0, 2], [0.0, 3], [0.0, 0.0], [0,0], [0,0], [0,0], [0,0]])
-        '''distance_error_pos = 0
-        distance_error_neg = 0
-        for label in labels:
-            indices = [i for i, x in enumerate(labels) if x == label]
-            other = [i for i, x in enumerate(labels) if x != label]
-            #indices = [0,1,2]
-            x = latents[indices]
-            differences = x.unsqueeze(1) - x.unsqueeze(0)
-            distances = torch.sum(differences * differences, -1).sum().div(2)
-            distance_error_pos += distances / len(x)
-
-            x = latents[other]
-            differences = x.unsqueeze(1) - x.unsqueeze(0)
-            distances = torch.sum(differences * differences, -1).sum().div(2)
-            distance_error_neg += distances / len(x)
-                
-        #print(distance_error)  
-        #exit(0)
-        distance = distance_error_pos - distance_error_neg + 0.2
-        distance = torch.mean(torch.max(distance, torch.zeros_like(distance))) '''
-        #print(input.shape)
-        #print(target.shape)
         return  F.l1_loss(input, target) 
   
     def training_step(self, batch, batch_idx):
@@ -107,11 +88,10 @@ class AutoencoderModel(LightningModule):
         latent = self.get_latent(input).squeeze()
         loss_val = self.loss(output, target, latent, l)
 
-        if self.current_epoch == self.hparams.epochs - 1:
-            print("####")
-            print(input[0])
-            print(output[0])
-            print("#####")
+        if self.in_vec_train == None:
+            self.in_vec_train = input[0]
+            self.target_vec_train = target[0]
+
         
         tqdm_dict = {'train_loss': loss_val, 'step' : self.current_epoch}
         output = OrderedDict({
@@ -126,7 +106,14 @@ class AutoencoderModel(LightningModule):
 
     ## method not called on last epoch!
     def training_epoch_end(self, outputs):
-        if self.logger and (self.current_epoch % self.hparams.plot_every == 0 or self.current_epoch == self.hparams.epochs - 1):
+        if self.current_epoch % 1 == 0:
+            in_vec = self.in_vec_train.view(1, -1, self.hparams.features)
+            target_vec = self.target_vec_train.view(1, -1, self.hparams.features)
+            out_vec = self(in_vec)
+            image = plotOutput(in_vec[0].tolist(), out_vec[0].tolist(), target_vec[0].tolist())
+            self.logger.experiment.add_image('output-train', image, self.current_epoch)
+
+        if self.logger and (self.current_epoch % self.hparams.plot_every == 0 or  self.current_epoch == self.hparams.epochs - 1):
             latents = []
             labels = []
             for output in outputs:
@@ -144,8 +131,8 @@ class AutoencoderModel(LightningModule):
 
             if self.current_epoch == self.hparams.epochs - 1:
                 log.info("Pickling...")
-                pickle.dump(latents, open("latents-auto.p", "wb"))
-                pickle.dump(labels, open("labels-auto.p", "wb"))
+                pickle.dump(zip(latents, labels), open("autoencoder/train.p", "wb"))
+
             self.logger.experiment.add_image('train', image, self.current_epoch)
 
         return {}
@@ -156,6 +143,12 @@ class AutoencoderModel(LightningModule):
         
         latent = self.get_latent(input).squeeze()
         loss_val = self.loss(output, target, latent, l)
+
+        
+        if self.in_vec == None:
+            self.in_vec = input[0]
+            self.target_vec = target[0]
+
 
         output = OrderedDict({
             'latent' : latent.tolist(),
@@ -170,8 +163,16 @@ class AutoencoderModel(LightningModule):
         # if returned a scalar from validation_step, outputs is a list of tensor scalars
         # we return just the average in this case (if we want)
         # return torch.stack(outputs).mean()
+
+        if self.current_epoch % 1 == 0:
+            in_vec = self.in_vec.view(1, -1, self.hparams.features)
+            target_vec = self.target_vec.view(1, -1, self.hparams.features)
+            out_vec = self(in_vec)
+            image = plotOutput(in_vec[0].tolist(), out_vec[0].tolist(), target_vec[0].tolist())
+            self.logger.experiment.add_image('output', image, self.current_epoch)
+
   
-        if outputs and self.logger and (self.current_epoch == 0 or self.current_epoch % self.hparams.plot_every == 0 or self.current_epoch == self.hparams.epochs - 1):
+        if outputs and self.logger and (self.current_epoch % self.hparams.plot_every == 0 or self.current_epoch == self.hparams.epochs - 1):
             latents = []
             labels = []
             for output in outputs:
@@ -180,6 +181,10 @@ class AutoencoderModel(LightningModule):
                     latent = [latent]
                 latents.extend(latent)
                 labels.extend(output['label'])
+
+            if self.current_epoch == self.hparams.epochs - 1:
+                log.info("Pickling...")
+                pickle.dump(zip(latents, labels), open("autoencoder/val.p", "wb"))
 
             
             image = visualize(latents, 
@@ -235,13 +240,13 @@ class AutoencoderModel(LightningModule):
     def prepare_data(self):
         num_classes = self.hparams.num_classes
         
-        '''print("Num classes: ", self.hparams.num_classes)
-        if num_classes == 2:
-            filename = "csv/parsed/stats_dataset-2class.csv"
+        print("Num classes: ", self.hparams.num_classes)
+        '''if num_classes == 2:
+            filename = "csv/parsed/stats_dataset-2class-400.csv"
         elif num_classes == 4:
-            filename = "csv/parsed/stats_dataset-4class.csv"
+            filename = "csv/parsed/stats_dataset-4class-400.csv"
         else:
-            filename = "csv/parsed/stats_dataset-6class.csv"
+            filename = "csv/parsed/stats_dataset-6class-400.csv"
 
         dataset = StatsDataset(filename)
 
@@ -252,35 +257,43 @@ class AutoencoderModel(LightningModule):
         if((train_size + val_test_size + test_size) != len(dataset)):
             train_size += (len(dataset) - val_test_size - test_size)
         
-
         print(train_size, val_test_size, test_size)
         train_dataset, validation_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size,  val_test_size, test_size]) 
-        
-        #torch.save(train_dataset, "data/parsed/train-4-4-200.p")
-        #torch.save(validation_dataset, "data/parsed/val-4-4-200.p")
-        #torch.save(test_dataset, "data/parsed/test-4-4-200.p")
-        print(len(dataset))
-        
-        
-        #train_dataset, validation_dataset, test_dataset = torch.load("data/parsed/train-" + str(num_classes) +  "-" + str(self.hparams.features) + "-200.p"), \
-        #    torch.load("data/parsed/val-" + str(num_classes) + "-" + str(self.hparams.features) +  "-200.p"), \
-        #    torch.load("data/parsed/test-" + str(num_classes) +  "-" + str(self.hparams.features)  + "-200.p")
 
         train_dataset = StatsSubsetDataset(train_dataset, wrapped = False, minmax = self.hparams.min_max)
         validation_dataset = StatsSubsetDataset(validation_dataset, wrapped = False, minmax = self.hparams.min_max)
         test_dataset = StatsSubsetDataset(test_dataset, wrapped = False, minmax = self.hparams.min_max)
 
-        pickle.dump(train_dataset, open("data/parsed/pickles/train-" + str(num_classes) + "-auto.p", "wb"))
-        pickle.dump(test_dataset,  open("data/parsed/pickles/val-" + str(num_classes) + "-auto.p", "wb"))
-        pickle.dump(validation_dataset,  open("data/parsed/pickles/test-" + str(num_classes) + "-auto.p", "wb"))
-        exit(0)
+        pickle.dump(train_dataset, open("data/parsed/pickles/true/train-" + str(num_classes) + "-auto.p", "wb"))
+        pickle.dump(test_dataset,  open("data/parsed/pickles/true/val-" + str(num_classes) + "-auto.p", "wb"))
+        pickle.dump(validation_dataset,  open("data/parsed/pickles/true/test-" + str(num_classes) + "-auto.p", "wb"))
+        #exit(0)
         '''
+        
+        
+        dataset = StatsTestDataset()
+        train_size = int(0.8 * len(dataset)) #int(0.8 * len(dataset))
+        val_test_size = int((len(dataset) - train_size) * 0.5)
+        test_size = len(dataset) - train_size - val_test_size
 
-        self.train_dataset = pickle.load(open("data/parsed/pickles/train-" + str(num_classes) + "-auto.p", "rb"))
-        self.validation_dataset = pickle.load(open("data/parsed/pickles/val-" + str(num_classes) + "-auto.p", "rb"))
-        self.test_dataset = pickle.load(open("data/parsed/pickles/test-" + str(num_classes) + "-auto.p", "rb"))
-        print(len(self.train_dataset), len(self.validation_dataset), len(self.test_dataset))
+        if((train_size + val_test_size + test_size) != len(dataset)):
+            train_size += (len(dataset) - val_test_size - test_size)
+        
+        print(train_size, val_test_size, test_size)
+        self.train_dataset, self.validation_dataset, self.test_dataset = torch.utils.data.random_split(dataset, [train_size,  val_test_size, test_size]) 
+        return
+        self.train_dataset = StatsSubsetDataset(train_dataset, wrapped = False, minmax = self.hparams.min_max)
+        self.validation_dataset = StatsSubsetDataset(validation_dataset, wrapped = False, minmax = self.hparams.min_max)
+        self.test_dataset = StatsSubsetDataset(test_dataset, wrapped = False, minmax = self.hparams.min_max)
+        return
+        
+        
+        
 
+        self.train_dataset = pickle.load(open("data/parsed/pickles/true/train-" + str(num_classes) + "-auto.p", "rb"))
+        self.validation_dataset = pickle.load(open("data/parsed/pickles/true/val-" + str(num_classes) + "-auto.p", "rb"))
+        self.test_dataset = pickle.load(open("data/parsed/pickles/true/test-" + str(num_classes) + "-auto.p", "rb"))
+     
         string = str(self.model)
         if self.hparams.type == "conv":
             string = string.replace("))", "))<br>")
@@ -314,22 +327,23 @@ class AutoencoderModel(LightningModule):
 
     def test_epoch_end(self, outputs):
         log.info('Fitting predictor...')
-        #latents = pickle.load(open("latents-auto.p", "rb"))
-        #labels = pickle.load(open("labels-auto.p", "rb"))
-        #predictor = knn(latents, labels, self.hparams.k_nn)
-
         latents = []
         labels = []
 
         for output in outputs:
             latent = output['latent']
+            
             if self.hparams.batch_size == 1:
                 latent = [latent]
             latents.extend(output['latent'])
             labels.extend(output['labels'])
 
+        log.info("Pickling...")
+        pickle.dump(zip(latents, labels), open("autoencoder/test.p", "wb"))
+
         train_size = int(0.8 * len(latents))
         test_size = len(latents) - train_size
+        print(train_size, test_size)
 
         train_latents, test_latents = latents[:train_size], latents[train_size:]
         train_labels, test_labels = labels[:train_size], labels[train_size:]
@@ -348,6 +362,22 @@ class AutoencoderModel(LightningModule):
         all = len(test_labels)
         test_acc = correct/all
 
+        #k_means_lab = []
+        #for label in test_labels:
+        #    if label == 3:
+        #        k_means_lab.append(0)
+        #    else:
+        #        k_means_lab.append(1)
+
+        '''km = KMeans(self.hparams.num_classes).fit(train_latents)
+        predicted = km.predict(test_latents)
+        correct = (labels == predicted).sum()
+        print(k_means_lab)
+        print(predicted)
+        all = len(test_labels)
+        test_acc_means = correct/all
+        print("kmeans accuracy ", test_acc_means)'''
+
         if self.logger:
             self.logger.experiment.add_scalar('test_acc', test_acc)
 
@@ -356,15 +386,23 @@ class AutoencoderModel(LightningModule):
             three_d = self.hparams.threeD,
             test = True,
             subtitle = self.hparams.model + " " + self.hparams.type)    
+
+        '''km_image = visualize(latents, 
+            km.predict(latents), 
+            three_d = self.hparams.threeD,
+            test = True,
+            subtitle = self.hparams.model + " " + self.hparams.type)   '''
         
         if self.logger:
             self.logger.experiment.add_image('test', image, self.current_epoch)
+            #self.logger.experiment.add_image('test_kmeans', km_image, self.current_epoch)
 
 
             # reduce manually when using dp
             #if self.trainer.use_dp or self.trainer.use_ddp2:
             #    test_loss = torch.mean(test_loss)
 
+    
         tqdm_dict = {'test_acc': test_acc, 'step': self.current_epoch}
         result = {'progress_bar': tqdm_dict, 'log': tqdm_dict, 'test_acc': test_acc}
         return result

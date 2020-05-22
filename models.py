@@ -8,105 +8,119 @@ import numpy as np
 
 from torch.nn.utils.rnn import  pad_sequence
 
-# define the NN architecture
+class VariationalAutoencoder(nn.Module):
+    def __init__(self, input_size, hidden_size, output_size):
+        super(VariationalAutoencoder, self).__init__()
+        self.in_size = input_size
+        self.hidden_size = hidden_size
+        intermediate = 10
+        
+        # encoder
+        self.enc_linear = nn.Linear(input_size, intermediate)
+        self.mu = nn.Linear(intermediate, hidden_size)
+        self.var = nn.Linear(intermediate, hidden_size)
+
+        #decoder
+        self.dec_linear = nn.Linear(hidden_size, intermediate)
+        self.out = nn.Linear(intermediate, input_size)
+
+        self.print = True
+
+
+    def forward(self, input):
+        batch_size, steps, _ = input.shape
+        if self.print:
+            print(input.shape)
+            self.print = False
+
+        #encoder
+        hidden = F.relu(self.enc_linear(input))
+        print(hidden.shape)
+        z_mu = self.mu(hidden)
+        z_var = self.var(hidden)
+        print(z_mu.shape)
+
+
+        #sampling
+        sample = self.sampling(z_mean, z_log_sigma)
+        
+        hidden = F.relu(self.dec_linear(x))
+        predicted = torch.sigmoid(self.out(hidden))
+        print(predicted.shape)
+        exit(0)
+        return decoded
+       
+    
+    def sampling(self, h_mean, h_sigma):
+        std = torch.exp(h_sigma / 2)
+        eps = torch.randn_like(std)
+        x_sample = eps.mul(std).add_(h_mean)
+        return x_sample
+
+        #batch_size, hidden_size, _ = hmean.shape
+        #epsilon = np.random.normal(0,1, (h_mean.shape))
+        #return z_mean + torch.exp(h_sigma) * epsilon
+
+
+    def get_latent(self, input):
+        #out, (hidden, _) = self.enc1(input)
+        #hidden = torch.cat((hidden[0], hidden[1]), 1)
+        #out, (hidden, _) = self.enc2(out)
+        #out, (hidden, _) = self.enc3(out)
+        #hidden = hidden[-1]
+        return hidden.squeeze()
+
+
+
+
 class ConvolutionalAutoencoder(nn.Module):
     
     def __init__(self, in_size, filters):
         super().__init__()
         self.in_size = in_size
         self.filters = filters
+        self.print = True
 
-        '''self.conv1 = nn.Conv1d(in_size, filters, 3, padding = 1)
-        #self.mp1 = nn.MaxPool1d(2)
-        self.conv2 = nn.Conv1d(filters, 1, 3, padding = 1)
-        self.bn2 = nn.BatchNorm1d(1)
-        self.mp2 = nn.MaxPool1d(2)
-        
-        self.t_conv1 = nn.ConvTranspose1d(1, filters, 3, stride=2)
-        self.t_conv2 = nn.ConvTranspose1d(filters, in_size, 3, stride=1)'''
-        
-        #Encoder
-        '''self.conv1 = nn.Conv1d(in_size, 4, 3, padding = 1)
-        self.mp1 = nn.MaxPool1d(2)
-
-        self.conv2 = nn.Conv1d(4, 8, 3, padding = 1)
-        self.bn2 = nn.BatchNorm1d(8)
-        #self.mp2 = nn.MaxPool1d(2)
-
-        self.conv3 = nn.Conv1d(8, 16, in_size, padding = 1)
-        self.bn3 = nn.BatchNorm1d(16)
-        self.mp3 = nn.MaxPool1d(2)
-
-        self.conv4 = nn.Conv1d(16, 32, 3, padding = 1)
-
-        self.conv5 = nn.Conv1d(32, 64, 3, padding = 1)
-        self.mp5 = nn.MaxPool1d(2)
-
-        self.conv6 = nn.Conv1d(64, 16, 3, padding = 1)
-
-        self.conv7 = nn.Conv1d(16, 1, 3, padding = 1)
-        self.mp7 = nn.MaxPool1d(2)
-
-
-        # Decoder
-        self.t_conv1 = nn.ConvTranspose1d(1, 16, 3, stride = 2)
-        self.t_conv2 = nn.ConvTranspose1d(16, 64, 3, stride = 1)
-        self.t_conv3 = nn.ConvTranspose1d(64, 32, 1, stride = 2)
-        self.t_conv4 = nn.ConvTranspose1d(32, 16, 1, stride = 1)
-        self.t_conv5 = nn.ConvTranspose1d(16, 8, 1, stride = 2)
-        self.t_conv6 = nn.ConvTranspose1d(8, 4, 1, stride = 1)
-        self.t_conv7 = nn.ConvTranspose1d(4, in_size, 1, stride = 2)
-        
-        self.dense = nn.Linear(81, 75)'''
-
-        self.encoder = nn.Sequential(
-            nn.Conv1d(in_size, 8, 3),
+        self.encoder = nn.Sequential( # like the Composition layer you built
+            nn.Conv1d(self.in_size, 16, 3, stride=2, padding=1),
             nn.ReLU(),
-            #nn.MaxPool1d(2),
-
-            nn.Conv1d(8, 32, 4),
-            nn.BatchNorm1d(32),
+            nn.Conv1d(16, 32, 3, stride=2, padding=1),
             nn.ReLU(),
-            #nn.MaxPool1d(2),
-
+            nn.Conv1d(32, 64, 3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.Conv1d(64, 32, 3, stride=1, padding=1),
+            nn.ReLU(),
             nn.Conv1d(32, 16, 3),
-            nn.BatchNorm1d(16),
             nn.ReLU(),
-            #nn.MaxPool1d(2),
-
-            nn.Conv1d(16, 64, 4),
+            nn.Conv1d(16, 1, 7),
             nn.ReLU(),
-            nn.Conv1d(64, 128, 5),
-            nn.ReLU(),
-            #nn.MaxPool1d(2),
-
-            nn.Conv1d(128, 32, 3),
-            nn.ReLU(),
-            nn.Conv1d(32, 1, 3),
-            nn.Tanh(),
-
         )
-
         self.decoder = nn.Sequential(
-            nn.ConvTranspose1d(1, 32, 3),
-            nn.ReLU(),
-            nn.ConvTranspose1d(32, 128, 3),
-            nn.ReLU(),
-            nn.ConvTranspose1d(128, 64, 5),
-            nn.ReLU(),
-            nn.ConvTranspose1d(64, 16, 4),
+            nn.ConvTranspose1d(1, 16, 7),
             nn.ReLU(),
             nn.ConvTranspose1d(16, 32, 3),
             nn.ReLU(),
-            nn.ConvTranspose1d(32, 8, 4),
+            nn.ConvTranspose1d(32, 64, 3, stride=1, padding=1),
             nn.ReLU(),
-            nn.ConvTranspose1d(8, in_size, 3),
+            nn.ConvTranspose1d(64, 32, 3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose1d(32, 16, 3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose1d(16, self.in_size, 3, stride=2, padding=1),
             nn.Tanh(),
+            nn.Linear(197, 200),
+            nn.Tanh()
         )
 
         
-    def forward(self, x):
-        encoded = self.get_latent(x)
+    def forward(self, input):
+        batch_size, L, features = input.shape
+        input = input.view(batch_size, features, L)
+        encoded = self.encoder(input)
+        
+        if self.print:
+            print(encoded.shape)
+            self.print = False
         reconstructed = self.get_reconstructed(encoded)
         return reconstructed
 
@@ -114,14 +128,37 @@ class ConvolutionalAutoencoder(nn.Module):
         batch_size, L, features = input.shape
         input = input.view(batch_size, features, L)
         x = self.encoder(input)
-        #print(x.shape)
-        return x
+        return x.squeeze()
 
     def get_reconstructed(self, x):
         batch_size, _, _ = x.shape
         x = self.decoder(x)
         x = x.view(batch_size, -1, self.in_size)
         return x
+
+class TimeDistributed(nn.Module):
+    def __init__(self, module, batch_first=False):
+        super(TimeDistributed, self).__init__()
+        self.module = module
+        self.batch_first = batch_first
+
+    def forward(self, x):
+
+        if len(x.size()) <= 2:
+            return self.module(x)
+
+        # Squash samples and timesteps into a single axis
+        x_reshape = x.contiguous().view(-1, x.size(-1))  # (samples * timesteps, input_size)
+
+        y = self.module(x_reshape)
+
+        # We have to reshape Y
+        if self.batch_first:
+            y = y.contiguous().view(x.size(0), -1, y.size(-1))  # (samples, timesteps, output_size)
+        else:
+            y = y.view(-1, x.size(1), y.size(-1))  # (timesteps, samples, output_size)
+
+        return y
 
 class LSTMAutoEncoder(nn.Module):
     def __init__(self, input_size, hidden_size, output_size, num_layers = 1, dropout = 0.1, bidirectional = False):
@@ -130,20 +167,43 @@ class LSTMAutoEncoder(nn.Module):
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.bidirectional = bidirectional
-        self.encoder = Encoder(input_size, hidden_size, num_layers, dropout, bidirectional)
-        self.decoder = Decoder(hidden_size, output_size, num_layers, dropout, bidirectional)
+       
+        self.enc1 = nn.LSTM(input_size, self.hidden_size, num_layers = 2, batch_first = True)
+        #self.enc2 = nn.LSTM(self.hidden_size*4, self.hidden_size*2, num_layers = 2, dropout = 0.5, batch_first = True) 
+        #self.enc3 = nn.LSTM(self.hidden_size*2, self.hidden_size,  num_layers = 2, dropout = 0.5, batch_first = True) 
+
+       
+        self.dec1 = nn.LSTM(self.hidden_size, self.hidden_size, num_layers = 2, batch_first = True)
+        self.dec2 = nn.LSTM(self.hidden_size, self.hidden_size//2, num_layers = 2, batch_first = True)
+        self.dense = nn.Linear(self.hidden_size//2, self.vec_size)
+        self.tdd = TimeDistributed(self.dense, batch_first = True)
+        self.print = True
 
     def forward(self, input):
         batch_size, steps, _ = input.shape
-        encoded = self.encoder(input)
-        encoded = encoded.view(batch_size, 1, self.hidden_size * (2 if self.bidirectional else 1)).expand(-1, steps, -1)
-        y = self.decoder(encoded)
-        return y
+        if self.print:
+            print(input.shape)
+            self.print = False
+
+        #print(input)
+        out, (hidden, _) = self.enc1(input)
+        hidden = hidden[-1]
+        encoded = hidden.view(batch_size, 1, self.hidden_size).repeat(1, steps, 1)
+
+        out, (hidden, _) = self.dec1(encoded)
+        out, (hidden, _) = self.dec2(out)
+        return self.tdd(out)
+       
+     
 
 
     def get_latent(self, input):
-        latent = self.encoder.get_latent(input)
-        return latent
+        out, (hidden, _) = self.enc1(input)
+        #hidden = torch.cat((hidden[0], hidden[1]), 1)
+        #out, (hidden, _) = self.enc2(out)
+        #out, (hidden, _) = self.enc3(out)
+        hidden = hidden[-1]
+        return hidden.squeeze()
 
 
 class Encoder(nn.Module):
@@ -154,31 +214,43 @@ class Encoder(nn.Module):
         self.bidirectional = bidirectional
         self.NN = nn.LSTM(input_size, hidden_size, batch_first = True, num_layers = num_layers, bidirectional = bidirectional)
 
-        nn.init.orthogonal_(self.NN.weight_ih_l0, gain=np.sqrt(2))
-        nn.init.orthogonal_(self.NN.weight_hh_l0, gain=np.sqrt(2))
+        self.encoder = nn.Sequential(
+            nn.LSTM(input_size, 8, batch_first = True),
+            nn.LSTM(8, 32,  batch_first = True) )
+
+        self.decoder = nn.Sequential(
+            nn.LSTM(32, 8, batch_first = True),
+            nn.LSTM(8, input_size,  batch_first = True) )
+       
+
+        #nn.init.orthogonal_(self.NN.weight_ih_l0, gain=np.sqrt(2))
+        #nn.init.orthogonal_(self.NN.weight_hh_l0, gain=np.sqrt(2))
      
     def forward(self, input):
+        #print(input.shape)
         self.NN.flatten_parameters()
         batch_size, steps, features = input.shape
-        output, (hidden, _) = self.NN(input)
-        hidden = hidden.view(self.num_layers, 2 if self.bidirectional else 1, batch_size, self.hidden_size)
-        hidden = hidden[-1]
-
-        if self.bidirectional:
-            hidden = torch.cat((hidden[0],hidden[1]), 1)
-
+        output, (hidden, _) = self.encoder(input)
+        print(hidden.shape)
+        output, (hidden, _) = self.decoder(input)
+        print()
+        exit(0)
         return hidden
         
 
     def get_latent(self, input):
         batch_size, _, _ = input.shape
         output, (hidden, _) = self.NN(input)
+        return hidden.squeeze()
+
         hidden = hidden.view(self.num_layers, 2 if self.bidirectional else 1, batch_size, self.hidden_size)
         hidden = hidden[-1]
         
         if self.bidirectional:
             hidden = torch.cat((hidden[0],hidden[1]), 1)
 
+        print(hidden.shape)
+        print(output.shape)
         return hidden.squeeze()
 
 class Decoder(nn.Module):
@@ -188,6 +260,7 @@ class Decoder(nn.Module):
         self.num_layers = num_layers
         self.bidirectional = False
         self.output_size = output_size
+        self.relu = nn.ReLU()
 
         self.NN = nn.LSTM(hidden_size * (2 if bidirectional else 1), output_size, batch_first = True, num_layers = num_layers, bidirectional = False)
         nn.init.orthogonal_(self.NN.weight_ih_l0, gain=np.sqrt(2))
@@ -197,13 +270,7 @@ class Decoder(nn.Module):
         batch_size, steps, _ = input.shape
         self.NN.flatten_parameters()
         output, hidden = self.NN(input)
-        #print("out",output.shape)
-        
-        #output = output.view(batch_size, steps, 2 if self.bidirectional else 1, self.output_size)
-        #if self.bidirectional:
-        #    output = output[:,:,0,:] + output[:,:,1,:]
-
-        return output
+        return self.relu(output)
 
 class TripletLSTMEncoder(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers = 1, dropout = 0.1, bidirectional = False):
@@ -213,8 +280,8 @@ class TripletLSTMEncoder(nn.Module):
         self.bidirectional = bidirectional
         self.NN = nn.LSTM(input_size, hidden_size, bidirectional = bidirectional, num_layers = num_layers, batch_first = True, dropout = dropout)
         self.pr = True
-        #nn.init.orthogonal_(self.NN.weight_ih_l0, gain=np.sqrt(2))
-        #nn.init.orthogonal_(self.NN.weight_hh_l0, gain=np.sqrt(2))
+        nn.init.orthogonal_(self.NN.weight_ih_l0, gain=np.sqrt(2))
+        nn.init.orthogonal_(self.NN.weight_hh_l0, gain=np.sqrt(2))
 
     def forward(self, a, p, n):
         if self.pr:
@@ -234,9 +301,9 @@ class TripletLSTMEncoder(nn.Module):
         hidden = hidden[-1]
 
         if self.bidirectional:
-            hidden = torch.cat((hidden[0], hidden[1]),1)
+            hidden = torch.add(hidden[0], hidden[1])
 
-        return (hidden.view(batch_size, -1, self.hidden_size * (2 if self.bidirectional else 1)))
+        return hidden.view(batch_size, -1, self.hidden_size * (1 if self.bidirectional else 1))
 
 
     def get_latent(self, input):
@@ -245,8 +312,8 @@ class TripletLSTMEncoder(nn.Module):
         hidden = hidden.view(self.num_layers, 2 if self.bidirectional else 1, batch_size, self.hidden_size)
         hidden = hidden[-1]
         if self.bidirectional:
-            hidden = torch.cat((hidden[0], hidden[1]), 1)
-        return hidden.view(batch_size, -1, self.hidden_size * (2 if self.bidirectional else 1)).squeeze()
+            hidden = torch.add(hidden[0], hidden[1])
+        return hidden.view(batch_size, -1, self.hidden_size * (1 if self.bidirectional else 1)).squeeze()
 
 
 class TripletConvolutionalEncoder(nn.Module):
@@ -255,59 +322,25 @@ class TripletConvolutionalEncoder(nn.Module):
 
         self.pr = True
         self.hidden_size = hidden_size
-
-        '''self.encoder = nn.Sequential(
-            nn.Conv1d(in_size, filters, 3, padding = 1),
-            nn.BatchNorm1d(filters),
-            nn.MaxPool1d(2),
-
-            nn.Conv1d(filters, filters // 2, 3, padding = 1),
-            nn.BatchNorm1d(filters // 2),
-            nn.MaxPool1d(2),
-
-            nn.Conv1d(filters // 2, filters // 4, 3, padding = 1),
-            nn.BatchNorm1d(filters // 4),
-
-            nn.Conv1d(filters // 4, 1, 3, padding = 1),
-            nn.BatchNorm1d(1),
-        )
-
-        '''
         self.encoder = nn.Sequential(
-            nn.Conv1d(in_size, 16, 3,  padding = 1),
-            nn.Tanh(),
-
-            nn.Conv1d(16, 32, 3, stride = 1,  padding = 1),
-            nn.Tanh(),
-
-            nn.Conv1d(32, 1, 3, stride = 1, padding = 1),
-            nn.Tanh(),
-            nn.MaxPool1d(2),
-
-            nn.Linear(25, self.hidden_size)
+            nn.Conv1d(4, 16, 3, stride=2, padding=1),
+            nn.ReLU(),
+            #nn.Dropout(0.25),
+            nn.Conv1d(16, 32, 3, stride=2, padding=1),
+            nn.ReLU(),
+            #nn.Dropout(0.25),
+            nn.Conv1d(32, 64, 3, stride=1, padding=1),
+            nn.ReLU(),
+            #nn.Dropout(0.25),
+            nn.Conv1d(64, 32, 3, stride=1, padding=1),
+            nn.ReLU(),
+            #nn.Dropout(0.25),
+            nn.Conv1d(32, 16, 3, stride = 1),
+            nn.ReLU(),
+            #nn.Dropout(0.25),
+            nn.Conv1d(16, 1, 7),
+            nn.ReLU(),
         )
-        
-        
-
-        '''self.encoder = nn.Sequential(
-            nn.Conv1d(in_size, 16, 3,  padding = 1),
-            nn.Tanh(),
-
-            nn.Conv1d(16, 32, 3, padding = 1),
-            nn.Tanh(),
-            nn.Dropout(0.1),
-
-            nn.Conv1d(32, 48, 3, padding = 1),
-            nn.Tanh(),
-            nn.MaxPool1d(2),
-            nn.Dropout(0.3),
-
-            nn.Conv1d(48, 1, 3, stride = 3, padding = 1),
-            nn.Tanh(),
-            nn.Dropout(0.5),
-
-            nn.Linear(25, self.hidden_size)
-        )'''
 
   
     def forward(self, a, p, n):
@@ -321,11 +354,10 @@ class TripletConvolutionalEncoder(nn.Module):
         input = input.view(batch_size, features, L)
 
         y = self.encoder(input)
-        y = y.view(batch_size, self.hidden_size, 1)
         
         if self.pr:
             print(y.shape)
             self.pr = False
 
-        return y
+        return y.squeeze()
         

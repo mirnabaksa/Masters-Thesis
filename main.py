@@ -23,11 +23,12 @@ def main(hparams):
 
     # distributed backend has to be ddp!
     save_dir = "test" if hparams.no_log else  "reference/" + hparams.model + "-" + hparams.type
+    print(save_dir)
     logger = TestTubeLogger(save_dir = save_dir, name = str(hparams.num_classes) + "-classes")
     trainer = pl.Trainer(
         logger = logger,
         distributed_backend="ddp",
-        gpus = 2,
+        gpus = 1,
         max_epochs=hparams.epochs
     )
 
