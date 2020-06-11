@@ -1,5 +1,5 @@
 import torch
-from torch.utils.data import Dataset, DataLoader, IterableDataset
+from torch.utils.data import Dataset
 
 import h5py
 import pandas as pd
@@ -7,17 +7,13 @@ import os
 import numpy as np
 from math import sin, cos, tan, atan, sqrt, exp
 
-from sklearn import preprocessing
-
-
 from statistics import mean, median, stdev
 from scipy.stats import mode, hmean, gmean, entropy, iqr
 
 import random
-from random import uniform, randint, choice
+from random import uniform, randint
 
 from sklearn.preprocessing import StandardScaler, minmax_scale, normalize
-from sklearn import preprocessing
 
 import pickle 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -26,8 +22,8 @@ torch.set_printoptions(precision=10)
 
 class TripletStatsDataset(Dataset):
 
-    def __init__(self, data = None, pickled = None, num_samples = 2):
-        
+    def __init__(self, data = None, pickled = None, num_samples = 2, test_set = False):
+        print("Is test set: ", test_set)
         if data is not None:    
             self.flat_data = pd.DataFrame(columns = ["stats_data", "label"])
             for i in range(len(data)):
@@ -48,6 +44,10 @@ class TripletStatsDataset(Dataset):
         self.data = pd.DataFrame(columns = ["anchor", "positive", "negative", "label"])
 
         for stats, label in self.flat_data.values.tolist():
+            if test_set:
+                self.data = self.data.append({"anchor" : stats, "positive" : stats, "negative" : stats, "label" : label}, ignore_index = True)
+                continue
+
             for other_label in self.get_distinct_labels():
                 if label == other_label:
                     continue
@@ -80,20 +80,19 @@ class TripletStatsDataset(Dataset):
 
     def get_distinct_labels(self):
         return [0,1,2,3,4,5]
-        #return ["bacillus_anthracis", "ecoli", "pseudomonas_koreensis", "yersinia_pestis", "pantonea_agglomerans", "klebsiella_pneumoniae"]
-
 
 class StatsSubsetDataset(Dataset):
 
     def __init__(self, subset, wrapped = False, seq2seq = False, minmax = False, noisy = False):
         self.subset = subset
         self.n = len(subset)
-        print("N: ", self.n)
         self.n_stats = len(subset[0][0][0])
-        print("N stats: ", self.n_stats)
         self.seq2seq = seq2seq
         self.wrapped = wrapped
         self.noisy = noisy
+
+        print("N: ", self.n)
+        print("N stats: ", self.n_stats)
 
         cols = [[] for j in range(self.n_stats)]
 
@@ -111,6 +110,8 @@ class StatsSubsetDataset(Dataset):
             else:
                 col_mean, stdev_mean = mean(col), stdev(col)
                 col_stats.append((col_mean, stdev_mean))
+
+                print(col_mean, stdev_mean)
         
         self.df = pd.DataFrame(columns = ["data", "label", "target"])
         for point in self.subset:
@@ -131,11 +132,26 @@ class StatsSubsetDataset(Dataset):
 
             target = data
             if self.noisy:
-                noise = np.random.normal(0,1, (len(data), len(data[0])))
+                noise = np.random.normal(0,0.5, (len(data), len(data[0])))
                 data = (np.array(data) + noise).tolist()
             self.df = self.df.append({"data" : data, "label" : self.get_label(label), "target" : target}, ignore_index = True)
-     
+
+
     def get_label(self, label):
+        if label == "Enter":
+            return 0
+        if label == "Staph":
+            return 1
+        if label == "Liste":
+            return 2
+        if label == "Lacto":
+            return 3
+        if label == "Bacil":
+            return 4
+        if label == "Esche":
+            return 5
+     
+    '''def get_label(self, label):
         if label == "ecoli":
             return 0
         if label == "pseudomonas_koreensis":
@@ -144,12 +160,14 @@ class StatsSubsetDataset(Dataset):
             return 2
         if label == "pantonea_agglomerans":
             return 3
-        if label == "bacilllus_anthracis":
+        if label == "bacillus_anthracis":
             return 4
         if label == "klebsiella_pneumoniae":
             return 5
         else:
-            return label
+            return label'''
+
+
 
     def column(self, matrix, i):
         return [row[i] for row in matrix]
@@ -161,7 +179,6 @@ class StatsSubsetDataset(Dataset):
         data, label, target = self.df.loc[idx]
         if self.wrapped:
             return data, label, target
-
         return torch.tensor(data), torch.tensor(label), torch.tensor(target)
     
 
@@ -177,7 +194,6 @@ class StatsDataset(Dataset):
 
     def __init__(self, reference_csv, raw = True):
         self.reference = pd.read_csv(reference_csv, delimiter = ",", header = None)
-        #self.reference = self.reference[:100]
         self.df = pd.DataFrame(columns = ["data", "label"])
         
         for i in range(1, len(self.reference)):
@@ -200,41 +216,60 @@ class StatsDataset(Dataset):
         return ["bacillus_anthracis", "ecoli", "pseudomonas_koreensis", "pantonea_agglomerans", "yersinia_pestis", "klebsiella_pneumoniae"]
 
 
+class PickledDataset(Dataset):
+
+    def __init__(self, pickled, raw = True):
+        data = pickle.load(open(pickled, "rb"))
+        self.seq_data = []
+        for latent, label in data:
+            sample = [[i] for i in latent]
+            self.seq_data.append([sample, label])
+            print(sample)
+
+    def __len__(self):
+        return len(self.seq_data)
+
+    def __getitem__(self, idx):
+        data, label = self.seq_data[idx]
+        return data, label
+
+    def get_distinct_labels(self):
+        return ["bacillus_anthracis", "ecoli", "pseudomonas_koreensis", "pantonea_agglomerans", "yersinia_pestis", "klebsiella_pneumoniae"]
+
+       
+
 class StatsTestDataset(Dataset):
 
     def __init__(self):
         n_classes = 2
-        n_points = 20
+        n_points = 50
         self.chunk = 2
+        x_len = 40
 
         self.data = []
         for i in range(n_points):
-            x_len = 20
             x = uniform(-1,1)
-            data = [x + j for j in np.arange(0, x_len, 0.1)]
-            #data = self.generateStatsData(data)
-            #data = [[i] for i in data]
-            self.data.append((data, 0))
-
+            data = [2 * sin(j - x) for j in np.arange(0, random.randint(1,3), 0.1)]
+            self.data.append((data, "Enter"))
+        
         for i in range(n_points):
-            x_len = 20
             x = uniform(-1,1)
-            data = [2 * x - j for j in np.arange(0, x_len, 0.1)]
-            #data = [[i] for i in data]
-            #data = self.generateStatsData(data)
-            self.data.append((data, 1))
-
-        '''for i in range(n_points):
-            x_len = 40
-            x = uniform(-1,1)
-            data = [sin(2*x + j) for j in np.arange(0, x_len, 0.1)]
+            data = [ sin(2 * j + x) for j in np.arange(0, random.randint(1,3), 0.1)]
             data = self.generateStatsData(data)
+            self.data.append((data, "Staph"))
+
+        
+        '''for i in range(n_points):
+            x = uniform(-1,1)
+            data = [sin(4*j *j -x) for j in np.arange(0, x_len, 0.1)]
+            data = self.generateStatsData(data)
+            
             self.data.append((data, 2))
+       
 
         for i in range(n_points):
-            x_len = 40
             x = uniform(-1,1)
-            data = [cos(3*x - j) for j in np.arange(0, x_len, 0.1)]
+            data = [2 * j * sin(-x - j) for j in np.arange(0, x_len, 0.1)]
             data = self.generateStatsData(data)
             self.data.append((data, 3))'''
         
@@ -256,16 +291,15 @@ class StatsTestDataset(Dataset):
                     continue
 
                 data_mean, data_median, data_stdev, en, data_iqr = mean(data_chunk), median(data_chunk),  stdev(data_chunk), entropy(data_chunk), iqr(data_chunk)
-                stats_data.append([data_mean,  data_stdev])
+                stats_data.append([data_mean, data_stdev])
         return stats_data
 
     def __len__(self):
-        #return 1
         return self.n
 
     def __getitem__(self, idx):
         data, label = self.data[idx]
-        return torch.tensor(data), torch.tensor(label), torch.tensor(data)
+        return data, label
 
     def get_distinct_labels(self):
         return [1,2,3,4]
@@ -280,9 +314,6 @@ class TestDataset(Dataset):
         n_classes = 2
         n_points = 200
 
-        #self.data = [([0.1,0.2,0.3,0.4,0.5],1) , ([-0.1,-0.2,-0.3,-0.4,-0.5],2)]
-        #self.n = 2
-        #return
 
         self.data = []
         for i in range(n_points):
@@ -375,7 +406,6 @@ class TripletTestDataset(Dataset):
         for i in range(n_points):
             test_sample = []
             x = uniform(-0.5,0.5)
-            #x_len = 4
             #x_len = randint(30, 60)
             #self.data.append(([min(max(x-0.2*i, -1), 1) for i in range(x_len)], 2))
             self.negative.append(([cos(x-0.08*i) for i in range(x_len)], "negative"))
@@ -384,7 +414,6 @@ class TripletTestDataset(Dataset):
         for i in range(n_points):
             test_sample = []
             x = uniform(-0.5,0.5)
-            #x_len = 4
             #x_len = randint(30, 60)
             #self.data.append(([min(max(x-0.2*i, -1), 1) for i in range(x_len)], 2))
             self.neutral.append(([tan(2*x+0.1*i) for i in range(x_len)], "neutral"))
@@ -427,14 +456,6 @@ class TripletTestDataset(Dataset):
             n = self.positive[randint(0,n_points-1)]
             self.triplets.append((a,p,n, 3))
 
-        ''' 
-        np.set_printoptions(precision=5)      
-        print(np.array(self.data[1][0]))
-        print(np.array(self.data[151][0]))
-        print(np.array(self.data[201][0]))
-        print(np.array(self.data[354][0]))
-        '''
-
         self.n = len(self.triplets)
 
     def __len__(self):
@@ -471,7 +492,7 @@ class SignalTripletDataset(Dataset):
         return torch.FloatTensor([[i] for i in data_a]), torch.FloatTensor([[i] for i in data_p]), torch.FloatTensor([[i] for i in data_n]), label
 
     def get_distinct_labels(self):
-        return ["bacillus_anthracis", "ecoli", ""]#, "klebsiella_pneumoniae", "pantonea_agglomerans", "pseudomonas_koreensis", "yersinia_pestis"]
+        return ["bacillus_anthracis", "ecoli", "klebsiella_pneumoniae", "pantonea_agglomerans", "pseudomonas_koreensis", "yersinia_pestis"]
 
 class SignalDataset(Dataset):
 
@@ -494,9 +515,7 @@ class SignalDataset(Dataset):
         data = signal.get_raw() if self.raw else signal.get_pA()
         copy = np.insert(data, 0, SOS_token, axis=0)
         
-       # labels = [label for i in range(len(data))]
         return torch.FloatTensor([[i] for i in copy]), label
-        #return list(torch.cuda.FloatTensor([[i] for i in data[j]]) for j in range(len(data))), label
 
     def get_distinct_labels(self):
         return ["bacillus_anthracis", "ecoli", "klebsiella_pneumoniae", "pantonea_agglomerans", "pseudomonas_koreensis", "yersinia_pestis"]
@@ -517,13 +536,7 @@ class Signal():
         
     
     def get_raw(self):
-       # return minmax_scale(self.data[i*self.chunk : (i+1)*self.chunk for i in range(len(self.data)//self.chunk)])
-        return minmax_scale(self.raw[:100])
-        #return list(minmax_scale(self.raw[i*self.chunk : (i+1)*self.chunk]) for i in range(len(self.raw)//self.chunk))
+        return list(minmax_scale(self.raw[i*self.chunk : (i+1)*self.chunk]) for i in range(len(self.raw)//self.chunk))
 
     def get_pA(self):
-        return minmax_scale((self.scale * (self.raw + self.offset))[:200])
-        #return list(minmax_scale(
-        #    self.scale * (self.raw[i*self.chunk : (i+1)*self.chunk] + self.offset))
-        #    for i in range(len(self.raw)//self.chunk)
-        #    )
+        return minmax_scale((self.scale * (self.raw + self.offset)))

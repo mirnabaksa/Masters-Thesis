@@ -6,5 +6,15 @@
 /true
 /reference
 /default
-**/data
-/loman
+/data
+loman
+/autoencoder
+/checkpoints
+/kraken
+/kraken2
+/parsed-out
+vae
+finalexperiment
+/metrics
+autoencoder
+auto

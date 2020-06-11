@@ -6,11 +6,11 @@ import torch
 import random
 
 import pytorch_lightning as pl
-from pytorch_lightning.loggers import TensorBoardLogger, TestTubeLogger
+from pytorch_lightning.loggers import TestTubeLogger
+from pytorch_lightning.callbacks import ModelCheckpoint
 
 from autoencoder_lightning import AutoencoderModel
 from triplet_lightning import TripletModel
-
 
 SEED = 2334
 torch.manual_seed(SEED)
@@ -22,33 +22,34 @@ def main(hparams):
     model = AutoencoderModel(hparams) if hparams.model == "auto" else TripletModel(hparams)
 
     # distributed backend has to be ddp!
-    save_dir = "test" if hparams.no_log else  "reference/" + hparams.model + "-" + hparams.type
+    save_dir = "test" if hparams.no_log else  "finalexperiment/" + hparams.model + "-" + hparams.type + "/"
     print(save_dir)
+
+    checkpoint_callback = ModelCheckpoint(
+        filepath=save_dir  + str(hparams.num_classes) + "-classes/checkpoints",
+        verbose=True,
+        monitor='val_loss',
+        mode='min'
+    )
+    #model = TripletModel.load_from_checkpoint('./finalexperiment/triplet-lstm/2-classes/_ckpt_epoch_144.ckpt')
+
     logger = TestTubeLogger(save_dir = save_dir, name = str(hparams.num_classes) + "-classes")
     trainer = pl.Trainer(
+        #resume_from_checkpoint='./finalexperiment/triplet-lstm/2-classes/_ckpt_epoch_144.ckpt',
         logger = logger,
-        distributed_backend="ddp",
-        gpus = 1,
-        max_epochs=hparams.epochs
+        gpus=1,
+        #distributed_backend="ddp",
+        max_epochs=hparams.epochs,
+        checkpoint_callback=checkpoint_callback
     )
 
     trainer.fit(model)
-
-    #model = MyLightingModule.load_from_checkpoint(PATH)
-    #model.eval()
-    #y_hat = model(x)
-
-    trainer = pl.Trainer(
-        logger = logger,
-        distributed_backend="ddp",
-        gpus = 1,
-        max_epochs=hparams.epochs
-    )
-
     trainer.test(model)
-
+  
+    
 
 if __name__ == '__main__':
+
 
     root_dir = os.path.dirname(os.path.realpath(__file__))
     parser = ArgumentParser(add_help=False)
@@ -60,7 +61,7 @@ if __name__ == '__main__':
     parser.add_argument('--features', default=4, type=int)
     parser.add_argument('--num_layers', default=1, type=int)
     parser.add_argument('--hidden_size', default=10, type=int)
-    parser.add_argument('--drop_prob', default=0.2, type=float)
+    parser.add_argument('--drop_prob', default=0.0, type=float)
     parser.add_argument('--bidirectional', default = False, action='store_true')
     parser.add_argument('--min_max', default = False, action='store_true')
     parser.add_argument('--filters', default=16, type=int)

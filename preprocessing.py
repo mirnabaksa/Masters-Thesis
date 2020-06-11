@@ -146,6 +146,9 @@ def constructTripletDatasetCSV(root_dir, name):
 
 
 if __name__ == '__main__':
-    constructDatasetCSV("../Signals/perfect/", dataset_name = "dataset-perfect4.csv")
-    constructRawSignalValuesCSV('dataset-perfect4.csv', 'perfect-raw4.csv')
-    constructStatsDataset(source = 'perfect-raw4.csv', dest = 'perfect-stats-6class-test.csv')
+    #constructDatasetCSV("../Signals/perfect/", dataset_name = "dataset-perfect4.csv")
+    #constructRawSignalValuesCSV('dataset-perfect4.csv', 'perfect-raw4.csv')
+    #constructStatsDataset(source = 'perfect-raw4.csv', dest = 'perfect-stats-6class-test.csv')
+
+    f = h5py.File("Zymo-GridION-EVEN-BB-SN-PCR-R10HC_multi/batch_10.fast5", 'r')
+    print(f["read_ffffe9d8-20b7-49d4-badc-d67cfcf7e29f"]["Raw"]["Signal"])

@@ -72,7 +72,7 @@ def showDataPlot(X, filename = "data", title = None):
     plt.close()
 
      
-def knn(X, y,  k = 3):
+def knn(X, y,  k):
     print("Fitting KNN...")
     neigh = KNeighborsClassifier(n_neighbors = k, weights = "distance")
     neigh.fit(X, y)
@@ -98,7 +98,8 @@ from torchvision.transforms import ToTensor
 from mpl_toolkits.mplot3d import Axes3D
 
 
-distinct_labels = ["bacillus_anthracis", "ecoli", "yersinia_pestis", "pseudomonas_koreensis", "pantonea_agglomerans", "klebsiella_pneumoniae"]
+#distinct_labels = ["bacillus_anthracis", "ecoli", "yersinia_pestis", "pseudomonas_koreensis", "pantonea_agglomerans", "klebsiella_pneumoniae"]
+distinct_labels = ["Enterococcus faecalis", "Staphylococcus aureus", "Listeria monocytogenes", "Lactobacillus fermentum", "Bacillus subtilis", "Escherichia coli"]
 #distinct_labels = [0,1,2,3]
 palette = np.array(sns.hls_palette(len(distinct_labels)))
 colours = ListedColormap(palette)
@@ -110,11 +111,11 @@ def scatter(x, labels, three_d = False, subtitle=None):
     f = plt.figure( edgecolor='black')
     ax = f.add_subplot(111,projection=('3d' if three_d else None))
     #if not three_d:
-    #ax.axis('off')
+    ax.axis('off')
     plt.tight_layout()
     #print(len(labels))
     
-    classes = [(i,distinct_labels[i]) for i in set(labels)]
+    classes = [distinct_labels[i] for i in set(labels)]
     c = [palette[i] for i in labels]
 
     values = labels
@@ -213,9 +214,13 @@ def plotOutput(in_vec, out_vec, target_vec):
     means_in = []
     means_out = []
     means_target = []
+    #means_in = in_vec
+    #means_out = out_vec
+    #means_target = target_vec
 
-    #stdev_in = []
-    #stdev_out = []
+
+    stdev_in = []
+    stdev_out = []
     for i in range(len(in_vec)):
         means_in.append(in_vec[i][0])
         means_out.append(out_vec[i][0])
