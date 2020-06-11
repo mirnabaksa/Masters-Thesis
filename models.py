@@ -430,11 +430,13 @@ class TripletLSTMEncoder(nn.Module):
         self.batch_size = batch_size
         self.bidirectional = bidirectional
 
-        self.NN = nn.LSTM(input_size, 16, bidirectional = self.bidirectional, num_layers = num_layers, batch_first = True, dropout = dropout)
-        self.NN2 = nn.LSTM(32, 48, bidirectional = False, num_layers = num_layers, batch_first = True, dropout = dropout)
+        self.NN = nn.LSTM(input_size, self.hidden_size, bidirectional = self.bidirectional, num_layers = num_layers, batch_first = True, dropout = dropout)
+        #self.NN1 = nn.LSTM(hidden_size*8, self.hidden_size*4, bidirectional = self.bidirectional, num_layers = num_layers, batch_first = True, dropout = dropout)
+        #self.NN2 = nn.LSTM(hidden_size*4, hidden_size*2, bidirectional = self.bidirectional, num_layers = num_layers, batch_first = True, dropout = dropout)
         #self.NN3 = nn.LSTM(hidden_size*2, hidden_size, bidirectional = self.bidirectional, num_layers = num_layers, batch_first = True, dropout = dropout)
-
-        self.pr = True
+        #self.dense = nn.Linear(self.hidden_size*2, self.hidden_size)
+        #self.norm = nn.BatchNorm1d(self.hidden_size*2)
+        self.print = True
         #
         #nn.init.orthogonal_(self.NN.weight_ih_l0, gain=np.sqrt(2))
         #nn.init.orthogonal_(self.NN.weight_hh_l0, gain=np.sqrt(2))
@@ -452,25 +454,37 @@ class TripletLSTMEncoder(nn.Module):
         out_p = self.output(p, batch_size)
         out_n = self.output(n, batch_size)
 
-        if self.pr:
+        if self.print:
             print(input_shape)
             print(out_a.shape)
-            self.pr = False
+            self.print = False
 
         return out_a, out_p, out_n
 
     def output(self, input, batch_size):
         out, (hidden, c) = self.NN(input)
-        out, (hidden, c) = self.NN2(out)
+        #out, (hidden, c) = self.NN1(out)
+        #out, (hidden, c) = self.NN2(out)
+        #out, (hidden, c) = self.NN3(out)
         #out = self.drop(out)
         #_, (hidden, _) = self.NN2(out)
+    
+        hidden = hidden.view(self.num_layers, 2 if self.bidirectional else 1, batch_size, self.hidden_size)
+        hidden = hidden[-1]
+        if self.print:
+            print(hidden.shape)
 
-        #hidden = hidden.view(self.num_layers, 2 if self.bidirectional else 1, batch_size, 24)
-        #hidden = hidden[-1]
 
-        #if self.bidirectional:
-        #    hidden = torch.cat((hidden[0], hidden[1]), 1)
+        if self.bidirectional:
+            hidden = torch.cat((hidden[0], hidden[1]),1)
 
+        if self.print:
+            print(hidden.shape)
+        #print(out.shape)
+        #out = self.pool(out)
+        #print(out.shape)
+        #hidden = self.dense(hidden)
+        #hidden = F.normalize(hidden)
         return hidden.squeeze()
 
 

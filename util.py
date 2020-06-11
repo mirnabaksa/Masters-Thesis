@@ -98,8 +98,8 @@ from torchvision.transforms import ToTensor
 from mpl_toolkits.mplot3d import Axes3D
 
 
-#distinct_labels = ["bacillus_anthracis", "ecoli", "yersinia_pestis", "pseudomonas_koreensis", "pantonea_agglomerans", "klebsiella_pneumoniae"]
-distinct_labels = ["Enterococcus faecalis", "Staphylococcus aureus", "Listeria monocytogenes", "Lactobacillus fermentum", "Bacillus subtilis", "Escherichia coli"]
+distinct_labels = ["bacillus anthracis", "ecoli", "yersinia pestis", "pseudomonas koreensis", "pantonea agglomerans", "klebsiella pneumoniae"]
+#distinct_labels = ["Enterococcus faecalis", "Staphylococcus aureus", "Listeria monocytogenes", "Lactobacillus fermentum", "Bacillus subtilis", "Escherichia coli"]
 #distinct_labels = [0,1,2,3]
 palette = np.array(sns.hls_palette(len(distinct_labels)))
 colours = ListedColormap(palette)
@@ -116,7 +116,7 @@ def scatter(x, labels, three_d = False, subtitle=None):
     #print(len(labels))
     
     classes = [distinct_labels[i] for i in set(labels)]
-    c = [palette[i] for i in labels]
+    c = [palette[i+1] for i in labels]
 
     values = labels
     if not three_d:

@@ -160,7 +160,7 @@ class TripletModel(LightningModule):
     # TRAINING SETUP
     # ---------------------
     def configure_optimizers(self):
-        optimizer = optim.AdamW(self.parameters())
+        optimizer = optim.Adam(self.parameters())
         return optimizer
 
    
@@ -212,9 +212,10 @@ class TripletModel(LightningModule):
         pickle.dump(test_dataset,  open("data/loman/test-" + str(num_classes) + ".p", "wb"))'''
         
 
-        self.train_dataset = pickle.load(open("data/loman/train-" + str(num_classes) + ".p", "rb"))
-        self.validation_dataset = pickle.load(open("data/loman/val-" + str(num_classes) + ".p", "rb"))
-        self.test_dataset = pickle.load(open("data/loman/test-" + str(num_classes) + ".p", "rb"))
+        #self.train_dataset = pickle.load(open("data/loman/train-" + str(num_classes) + ".p", "rb"))
+        #self.validation_dataset = pickle.load(open("data/loman/val-" + str(num_classes) + ".p", "rb"))
+        #self.test_dataset = pickle.load(open("data/loman/test-" + str(num_classes) + ".p", "rb"))
+        
 
         ## Artificial Data
         '''if num_classes == 2:
@@ -244,12 +245,12 @@ class TripletModel(LightningModule):
         pickle.dump(train_dataset, open("data/parsed/pickles/true/train-" + str(num_classes) + ".p", "wb"))
         pickle.dump(validation_dataset,  open("data/parsed/pickles/true/val-" + str(num_classes) + ".p", "wb"))
         pickle.dump(test_dataset,  open("data/parsed/pickles/true/test-" + str(num_classes) + ".p", "wb"))
-        exit(0)'''
-        
+        exit(0)
+        '''
     
-        #self.train_dataset = pickle.load(open("data/parsed/pickles/true/train-" + str(num_classes) + ".p", "rb"))
-        #self.validation_dataset = pickle.load(open("data/parsed/pickles/true/val-" + str(num_classes) + ".p", "rb"))
-        #self.test_dataset = pickle.load(open("data/parsed/pickles/true/test-" + str(num_classes) + ".p", "rb"))
+        self.train_dataset = pickle.load(open("data/parsed/pickles/true/train-" + str(num_classes) + ".p", "rb"))
+        self.validation_dataset = pickle.load(open("data/parsed/pickles/true/val-" + str(num_classes) + ".p", "rb"))
+        self.test_dataset = pickle.load(open("data/parsed/pickles/true/test-" + str(num_classes) + ".p", "rb"))
 
 
         ## Test Data
@@ -344,9 +345,9 @@ class TripletModel(LightningModule):
 
         if self.logger:
             self.logger.experiment.add_image('test', image, self.current_epoch)
-            
-        tqdm_dict = {'test_acc': test_acc}
-        result = {'progress_bar': tqdm_dict, 'log': tqdm_dict, 'test_acc': test_acc}
+
+        tqdm_dict = {'test_acc': acc}
+        result = {'progress_bar': tqdm_dict, 'log': tqdm_dict, 'test_acc': acc}
         return result
 
 

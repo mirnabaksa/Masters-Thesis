@@ -12,9 +12,12 @@ loman
 /checkpoints
 /kraken
 /kraken2
-/parsed-out
 vae
 finalexperiment
 /metrics
 autoencoder
 auto
+clear.sh
+/metrics
+parsed-out
+meta_tags.csv

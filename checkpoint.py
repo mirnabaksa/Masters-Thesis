@@ -19,31 +19,21 @@ random.seed(SEED)
 
 def main(hparams):
     print(hparams)
-    model = AutoencoderModel(hparams) if hparams.model == "auto" else TripletModel(hparams)
+    ckpt = "./reference/triplet-lstm/4-classes/version_9/checkpoints/epoch=98.ckpt"
 
-    # distributed backend has to be ddp!
-    save_dir = "test" if hparams.no_log else  "finalexperiment/" + hparams.model + "-" + hparams.type + "/"
-    print(save_dir)
-
-    checkpoint_callback = ModelCheckpoint(
-        filepath=save_dir  + str(hparams.num_classes) + "-classes/checkpoints",
-        verbose=True,
-        monitor='val_loss',
-        mode='min'
-    )
-    #model = TripletModel.load_from_checkpoint('./finalexperiment/triplet-lstm/2-classes/_ckpt_epoch_87.ckpt')
+    save_dir = "test" if hparams.no_log else  "metrics/" + hparams.model + "-" + hparams.type + "/"
+    model = TripletModel.load_from_checkpoint(ckpt)
 
     logger = TestTubeLogger(save_dir = save_dir, name = str(hparams.num_classes) + "-classes")
     trainer = pl.Trainer(
-    #    resume_from_checkpoint='./finalexperiment/triplet-lstm/2-classes/_ckpt_epoch_87.ckpt',
+        resume_from_checkpoint=ckpt,
         logger = logger,
         gpus=1,
         #distributed_backend="ddp",
-        max_epochs=hparams.epochs,
-        checkpoint_callback=checkpoint_callback
+        max_epochs=3
     )
+    #trainer.fit(model)
 
-    trainer.fit(model)
     trainer.test(model)
   
     
