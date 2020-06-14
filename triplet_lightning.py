@@ -15,9 +15,15 @@ from pytorch_lightning import Callback
 from pytorch_lightning import _logger as log
 from pytorch_lightning.core import LightningModule
 
+from preprocessing_fasta import start
+
 from SignalDataset import StatsDataset, StatsSubsetDataset, TripletStatsDataset, StatsTestDataset
 from util import knn, visualize, showPlot
 from models import TripletLSTMEncoder, TripletConvolutionalEncoder
+
+from statistics import mean, median, stdev
+from scipy.stats import iqr
+import pandas as pd
 
 def collate(input):
     a, p, n, labels = map(list, zip(*input))
@@ -66,6 +72,7 @@ class TripletModel(LightningModule):
     # TRAINING
     # ---------------------
     def forward(self, a, p, n, len_a, len_p, len_n):
+  
         return self.model(a, p, n, len_a, len_p, len_n)
         
 
@@ -96,7 +103,7 @@ class TripletModel(LightningModule):
         return output
 
     def training_epoch_end(self, outputs):
-        if self.logger and (self.current_epoch % self.hparams.plot_every == 0 or self.current_epoch == self.hparams.epochs - 1):
+        if self.logger and (self.current_epoch == self.hparams.epochs - 1):
             latents = []
             labels = []
             for output in outputs:
@@ -128,7 +135,7 @@ class TripletModel(LightningModule):
       
 
     def validation_epoch_end(self, outputs):
-        if self.logger and (self.current_epoch % self.hparams.plot_every == 0 or self.current_epoch == self.hparams.epochs - 1):
+        if False and self.logger and (self.current_epoch % self.hparams.plot_every == 0 or self.current_epoch == self.hparams.epochs - 1):
             latents = []
             labels = []
             for output in outputs:
@@ -180,13 +187,15 @@ class TripletModel(LightningModule):
         return loader
 
 
+
     def prepare_data(self):
+        
         num_classes = self.hparams.num_classes
         print("In prepare data")
 
         ## Zymo data
         '''if num_classes == 2:
-            filename = "csv/loman/2-class-4000.csv"
+            filename = "csv/loman/2-class-400-2.csv"
         elif num_classes == 4:
             filename = "csv/loman/4-class-4000.csv"
         else:
@@ -207,28 +216,30 @@ class TripletModel(LightningModule):
         validation_dataset = TripletStatsDataset(StatsSubsetDataset(validation_dataset, wrapped = True, minmax = self.hparams.min_max))
         test_dataset = TripletStatsDataset(StatsSubsetDataset(test_dataset, wrapped = True, minmax = self.hparams.min_max), test_set = True)
 
-        pickle.dump(train_dataset, open("data/loman/train-" + str(num_classes) + ".p", "wb"))
-        pickle.dump(validation_dataset,  open("data/loman/val-" + str(num_classes) + ".p", "wb"))
-        pickle.dump(test_dataset,  open("data/loman/test-" + str(num_classes) + ".p", "wb"))'''
+        pickle.dump(train_dataset, open("data/loman/train-" + str(num_classes) + "-2.p", "wb"))
+        pickle.dump(validation_dataset,  open("data/loman/val-" + str(num_classes) + "-2.p", "wb"))
+        pickle.dump(test_dataset,  open("data/loman/test-" + str(num_classes) + "-2.p", "wb"))
         
 
-        #self.train_dataset = pickle.load(open("data/loman/train-" + str(num_classes) + ".p", "rb"))
-        #self.validation_dataset = pickle.load(open("data/loman/val-" + str(num_classes) + ".p", "rb"))
-        #self.test_dataset = pickle.load(open("data/loman/test-" + str(num_classes) + ".p", "rb"))
+        self.train_dataset = pickle.load(open("data/loman/train-" + str(num_classes) + "-2.p", "rb"))
+        self.validation_dataset = pickle.load(open("data/loman/val-" + str(num_classes) + "-2.p", "rb"))
+        self.test_dataset = pickle.load(open("data/loman/test-" + str(num_classes) + "-2.p", "rb"))'''
+
+
+        
         
 
         ## Artificial Data
-        '''if num_classes == 2:
-            filename = "csv/parsed/stats_dataset-2class-400.csv"
+        if num_classes == 2:
+            filename = "csv/parsed-20k/stats_dataset-2class-400.csv"
         elif num_classes == 4:
             filename = "csv/parsed/stats_dataset-4class-400.csv"
         else:
-            filename = "csv/parsed/stats_dataset-6class-400.csv"
+            filename = "csv/parsed-50k/stats_dataset-6class.csv"
 
         dataset = StatsDataset(filename)
-        print("Here")
 
-        train_size = int(0.8 * len(dataset)) #int(0.8 * len(dataset))
+        '''train_size = int(0.8 * len(dataset)) #int(0.8 * len(dataset))
         val_test_size = int((len(dataset) - train_size) * 0.5)
         test_size = len(dataset) - train_size - val_test_size
 
@@ -237,21 +248,26 @@ class TripletModel(LightningModule):
         
         print(train_size, val_test_size, test_size)
         train_dataset, validation_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size,  val_test_size, test_size]) 
+        print(len(train_dataset), len(validation_dataset), len(test_dataset))
+        
 
         train_dataset = TripletStatsDataset(StatsSubsetDataset(train_dataset, wrapped = True, minmax = self.hparams.min_max))
+        print(len(train_dataset))
+     
         validation_dataset = TripletStatsDataset(StatsSubsetDataset(validation_dataset, wrapped = True, minmax = self.hparams.min_max))
         test_dataset = TripletStatsDataset(StatsSubsetDataset(test_dataset, wrapped = True, minmax = self.hparams.min_max), test_set = True)
+        print(len(train_dataset), len(validation_dataset), len(test_dataset))
 
-        pickle.dump(train_dataset, open("data/parsed/pickles/true/train-" + str(num_classes) + ".p", "wb"))
-        pickle.dump(validation_dataset,  open("data/parsed/pickles/true/val-" + str(num_classes) + ".p", "wb"))
-        pickle.dump(test_dataset,  open("data/parsed/pickles/true/test-" + str(num_classes) + ".p", "wb"))
-        exit(0)
-        '''
+        pickle.dump(train_dataset, open("data/parsed/pickles/true/train-" + str(num_classes) + "-50k.p", "wb"))
+        pickle.dump(validation_dataset,  open("data/parsed/pickles/true/val-" + str(num_classes) + "-50k.p", "wb"))
+        pickle.dump(test_dataset,  open("data/parsed/pickles/true/test-" + str(num_classes) + "-50k.p", "wb"))'''
+       
     
-        self.train_dataset = pickle.load(open("data/parsed/pickles/true/train-" + str(num_classes) + ".p", "rb"))
-        self.validation_dataset = pickle.load(open("data/parsed/pickles/true/val-" + str(num_classes) + ".p", "rb"))
-        self.test_dataset = pickle.load(open("data/parsed/pickles/true/test-" + str(num_classes) + ".p", "rb"))
+        self.train_dataset = pickle.load(open("data/parsed/pickles/true/train-" + str(num_classes) + "-50k.p", "rb"))
+        self.validation_dataset = pickle.load(open("data/parsed/pickles/true/val-" + str(num_classes) + "-50k.p", "rb"))
+        self.test_dataset = pickle.load(open("data/parsed/pickles/true/test-" + str(num_classes) + "-50k.p", "rb"))
 
+        print(len(self.train_dataset), len(self.validation_dataset), len(self.test_dataset))
 
         ## Test Data
         '''dataset = StatsTestDataset()

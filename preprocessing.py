@@ -46,7 +46,6 @@ def constructRawSignalValuesCSV(dataset_csv,  name = 'raw_dataset.csv'):
         index, filename, label = df_semantic.loc[i]
         f = h5py.File(filename, 'r')
         data = np.array(f["Raw"]["Reads"]["Read_981"]["Signal"]).astype(np.float)
-        #data = minmax_scale(data, feature_range = (0,1))
 
         for i in range(len(data)//read_len):
             data_chunk = data[i*read_len : (i+1)*read_len]
@@ -86,69 +85,25 @@ def constructStatsDataset(source = "raw_dataset.csv", dest = "stats_dataset.csv"
             data_entropy = entropy(data_chunk)
             data_iqr = iqr(data_chunk)
             data_max, data_min = max(data_chunk), min(data_chunk)
-            #data_mod = mode(data_chunk)[0][0]
-            #data_skew = skew(data_chunk)
+
             stats = [data_mean, data_gmean, data_median, data_stdev, data_entropy, data_iqr]
-            #stats = minmax_scale(stats)
             stats_data.append(",".join([str(param) for param in stats]))
         
         df = df.append({'label' : label, 'stats_data' : '$'.join(stats_data)}, ignore_index = True)
     
 
-    print(labels)
     new_df = pd.DataFrame(columns = ["label","stats_data"])
     lens = []
     for label in labels:
         data = df.loc[df['label'] == label]
         lens.append(len(data))
 
-    min_len = min(lens)
-    print(min_len)
-    for label in labels:
-        data = df.loc[df['label'] == label]
-        ds = data.sample(min_len)
-        new_df = new_df.append(ds)
 
     new_df = new_df.sample(frac=1).reset_index(drop=True)
     new_df.to_csv('csv/' + dest)
     print("csv/" + dest + " created!")
 
-'''
-import random       
-import collections
-def constructTripletDatasetCSV(root_dir, name):
-    with open('csv/' + name, 'w') as dataset_file:
-        file_writer = csv.writer(dataset_file)
-
-        data = collections.defaultdict(list)
-        for sub_dir in listdir(root_dir):
-            label = sub_dir.replace("_reference_DeepSimu", "")
-            if (not (label == "ecoli" or label == "bacillus_anthracis" or label == "pseudomonas_koreensis")):
-                continue
-        
-            count = 0
-            target_dir = join(root_dir, sub_dir, "fast5")
-            for filename in listdir(target_dir):
-                data[label].append(join(target_dir, filename))
-        
-        for label, files in data.items():
-            for i in range(100):
-                anchor = random.choice(files)
-                positive = random.choice(files)
-
-                for negative_label, negative_files in data.items():
-                    if label == negative_label:
-                        continue
-                    negative = random.choice(negative_files)
-                    file_writer.writerow((anchor, positive, negative, label))
-'''
-
-
-
 if __name__ == '__main__':
     #constructDatasetCSV("../Signals/perfect/", dataset_name = "dataset-perfect4.csv")
     #constructRawSignalValuesCSV('dataset-perfect4.csv', 'perfect-raw4.csv')
     #constructStatsDataset(source = 'perfect-raw4.csv', dest = 'perfect-stats-6class-test.csv')
-
-    f = h5py.File("Zymo-GridION-EVEN-BB-SN-PCR-R10HC_multi/batch_10.fast5", 'r')
-    print(f["read_ffffe9d8-20b7-49d4-badc-d67cfcf7e29f"]["Raw"]["Signal"])

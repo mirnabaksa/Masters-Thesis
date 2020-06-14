@@ -16,7 +16,8 @@ from os.path import isfile, join
 from sklearn.preprocessing import minmax_scale
 from SignalDataset import StatsDataset, TripletStatsDataset, StatsSubsetDataset
 import torch
-ref_len = 83948
+#ref_len = 83948
+ref_len = 50000 #20k
 offset = 1000
 
 def readFasta(filename, outfile):
@@ -56,6 +57,7 @@ def readFasta(filename, outfile):
 def constructDatasetCSV(root_dir, dataset_name):
     print("Constructing csv...")
     labels = []
+    
     with open('csv/' + dataset_name, 'w') as dataset_file:
         file_writer = csv.writer(dataset_file)
         file_writer.writerow(("file", "label"))
@@ -63,85 +65,119 @@ def constructDatasetCSV(root_dir, dataset_name):
             label = sub_dir
             labels.append(label)
 
+            #if not (label == "ecoli" or label == "pseudomonas_koreensis"): #or label == "pantonea_agglomerans" or label == "yersinia_pestis"):
+            #    continue
+
             target_dir = join(root_dir, sub_dir)
+            i = 0
             for filename in listdir(target_dir):
+                i += 1
                 file_writer.writerow((join(target_dir, filename), label))
+                if i == 2000:
+                    print(label, i)
+                    break
 
     print('csv/' + dataset_name + " created")
 
+num_samples = 4000
 def constructRawSignalValuesCSV(root_dir, dataset_name):
-    df_semantic = pd.read_csv('csv/' + root_dir) 
-    column_names = ["label","raw_data"]
-
-    df = pd.DataFrame(columns=column_names)
-    for i in range(len(df_semantic)):
-        filename, label = df_semantic.loc[i]
-
-        f = h5py.File(filename, 'r')
-        data = np.array(f["Raw"]["Reads"]["Read_981"]["Signal"]).astype(np.float)
-        data_str =  ','.join([str(num) for num in data])
-        df = df.append({'raw_data' : data_str, 'label' : label}, ignore_index = True)
     
-    df.to_csv('csv/' + dataset_name)
+    #df_semantic = pd.read_csv('csv/' + root_dir) 
+    column_names = ["label","raw_data"]
+    print("here")
+    f = open('csv/' + dataset_name, 'w')
+    writer = csv.writer(f)
+    writer.writerow(["label", "raw_data"])
+    i = 0
+    for data in pd.read_csv('csv/parsed-50k/dataset-reads.csv', chunksize=1000):  
+        #print(data)
+        for index, row in data.iterrows():
+            filename, label = row['file'], row['label']
+    #for i in range(len(df_semantic)):
+        #filename, label = df_semantic.loc[i]
+            i += 1
+            #print(filename)
+            #print(label)
+            f = h5py.File(filename, 'r')
+            data = np.array(f["Raw"]["Reads"]["Read_981"]["Signal"]).astype(np.float)
+            data_str =  ','.join([str(num) for num in data])
+        #df = df.append({'raw_data' : data_str, 'label' : label}, ignore_index = True)
+            writer.writerow([data_str, label])
+            if i % 1000 == 0:
+                print(i)
+       
+
+    
+    #df.to_csv('csv/' + dataset_name)
     print('csv/' + dataset_name + " created!")
 
 
 from statistics import mean, median, stdev
 from scipy.stats import iqr
-
+import csv
 def constructStatsDataset(root_dir = "raw_dataset.csv", dataset_name = "stats_dataset.csv", chunk = 400):
-    df_raw = pd.read_csv('csv/' + root_dir)  
+    print("here")
+    #df_raw = pd.read_csv('csv/' + root_dir)  
     column_names = ["label","stats_data"]
-
-    df = pd.DataFrame(columns=column_names)
     print("data loaded")
-    labels = []
-    for i in range(len(df_raw)):
-        row = df_raw.loc[i]
-        index, label, data = row
+    #df = pd.DataFrame(columns=column_names)
 
-        if not (label == "ecoli" or label == "pseudomonas_koreensis" or label == "pantonea_agglomerans" or label == "yersinia_pestis"):
-            continue
+    f = open('csv/' + dataset_name, 'w')
+    writer = csv.writer(f)
+    i = 0
+    for data in pd.read_csv('csv/' + root_dir, chunksize=100):     
+        i = i + len(data)
 
-        if label not in labels:
-            labels.append(label)
+        if i % 1000 == 0:
+            print(i)
+        labels = []
 
-        splitted = data.split(",")
-        splitted = [float(num) for num in splitted]
+        for index, row in data.iterrows():
+            data, label = row['label'], row['raw_data']
+            #print(label)
+
+            if label not in labels:
+                labels.append(label)
+
+            splitted = data.split(",")
+            splitted = [float(num) for num in splitted]
         
-        stats_data = []
-        if len(splitted)//chunk != 209:
-            continue
-
-        for i in range(len(splitted)//chunk):
-            data_chunk = splitted[i*chunk : (i+1)*chunk]
-            if len(data_chunk) < 2:
-                continue
+            stats_data = []
+            for i in range(len(splitted)//chunk):
+                data_chunk = splitted[i*chunk : (i+1)*chunk]
+                if len(data_chunk) < 2:
+                    continue
             
-            data_mean = mean(data_chunk)
-            data_median = median(data_chunk)
-            data_stdev = stdev(data_chunk)
-            data_iqr = iqr(data_chunk)
+                data_mean = mean(data_chunk)
+                data_median = median(data_chunk)
+                data_stdev = stdev(data_chunk)
+                data_iqr = iqr(data_chunk)
+                data_energy = sum(abs(data)**2 for data in data_chunk)
+            #dodati signal
             #data_max, data_min = max(data_chunk), min(data_chunk)
             #data_mod = mode(data_chunk)[0][0]
             #data_skew = skew(data_chunk)
-            stats = [data_mean, data_median, data_stdev, data_iqr]
-            stats_data.append(",".join([str(param) for param in stats]))
+                stats = [data_mean, data_median, data_stdev, data_iqr, data_energy]
+                stats_data.append(",".join([str(param) for param in stats]))
         
-        df = df.append({'label' : label, 'stats_data' : '$'.join(stats_data)}, ignore_index = True)
+            stat = '$'.join(stats_data)
+            writer.writerow([label, stat])
+            #df = df.append({'label' : label, 'stats_data' : '$'.join(stats_data)}, ignore_index = True)
     
 
-    new_df = df.sample(frac=1).reset_index(drop=True)
-    new_df.to_csv('csv/' + dataset_name)
+    #new_df = df.sample(frac=1).reset_index(drop=True)
+    #new_df.to_csv('csv/' + dataset_name)
     print("csv/" + dataset_name + " created!")
+
+
 
 shorter = ["Liste", "Enter", "Staph", "Salmo", "Esche", "Lacto", "Bacil"]
 8875, 6454, 6295, 1996, 2095, 4065, 10406
-
+import pickle
 from collections import Counter
 labels = ["Enter", "Staph"]
-def constructLomanStatsDataset(root_dir = "./loman/files/final/final-signals-short-filtered-4class.txt",  chunk = 400):
-    num_samples = 4000
+def constructLomanStatsDataset(root_dir = "./loman/files/final/final-signals-short-filtered-2class.txt",  chunk = 400):
+    num_samples = 2000
     c = Counter({'Enter': 0, 'Staph': 0, 'Liste': 0, 'Lacto' : 0, 'Bacil' : 0, 'Esche' : 0}) 
 
     df_raw = pd.read_csv(root_dir, sep=" ", header = None)  
@@ -154,7 +190,7 @@ def constructLomanStatsDataset(root_dir = "./loman/files/final/final-signals-sho
         row = df_raw.loc[j]
         _, _, _, label, raw_data = row
         
-        if c["Enter"] == num_samples and c["Staph"] == num_samples and c["Liste"] == num_samples and c["Lacto"] == num_samples: # and c["Bacil"] == num_samples and c["Esche"] == num_samples:
+        if c["Enter"] == num_samples and c["Staph"] == num_samples: #and c["Liste"] == num_samples and c["Lacto"] == num_samples: # and c["Bacil"] == num_samples and c["Esche"] == num_samples:
             print(c)
             break
 
@@ -162,11 +198,11 @@ def constructLomanStatsDataset(root_dir = "./loman/files/final/final-signals-sho
             continue
 
         
-        c[label] += 1
         
         splitted = raw_data.split(",")
         splitted = [float(num) for num in splitted]
 
+        c[label] += 1
         stats_data = []
 
         for i in range(len(splitted)//chunk):
@@ -183,11 +219,8 @@ def constructLomanStatsDataset(root_dir = "./loman/files/final/final-signals-sho
         
         df = df.append({'label' : label, 'stats_data' : '$'.join(stats_data)}, ignore_index = True)
 
-        if j % 1000 == 0:
-            print(j)
-
     
-    df.to_csv('csv/loman/4-class-4000.csv')
+    df.to_csv('csv/loman/2-class-400-2.csv')
     print("csv/ created!")
 
 
@@ -220,7 +253,6 @@ def print_item(name, item):
                     channel = item.attrs[key]
                     channel = channel.decode('utf-8')
 
-                    #print(read_id, read_number, channel, value[:10])
                     
                     df = df.append( {"read_id" : read_id, 'read_num' : read_number, 'value' : value, 'channel' : channel}, ignore_index = True)
                     
@@ -234,40 +266,31 @@ def print_item(name, item):
                         print(count)
                         df.to_csv("signals.csv", sep="\t", index = False, header = None)
 
-                    if count == 50000:
-                        print(count)
-                        #df.to_csv("signals.csv", sep="\t", index = False, header = None)
-                        exit(0)
 
        
         if hasattr(item, 'value'):
             value = item.value
             value = ','.join([str(num) for num in value])      
             
-        
-
-        
-            
+    
     
 
 def log_hdf_file(hdf_file):
     print_item(hdf_file.filename, hdf_file)
     hdf_file.visititems(print_item)
-    print(count)
     df.to_csv("signals.csv", sep="\t", index = False, header = None)
 
 
 classes = ["listeria monocytogenes", "pseudomonas aeruginosa",  "enterococcus faecalis", "Staphylococcus aureus", "salmonella enterica", "escherichia coli" ]
-#filter_func = lambda s : sum(s.startswith(x) for x in classes))
-def filter_func(s):
-    for x in classes:
-        if s.startswith(x):
-            return x
-    return False
+
+def start():
+    #constructDatasetCSV("../Signals/parsed-20k-signals/", dataset_name = "parsed-20k/dataset-reads2.csv")
+    #constructRawSignalValuesCSV(root_dir = "parsed-20k/dataset-reads2.csv", dataset_name = 'parsed-20k/raw_dataset2.csv')
+    constructStatsDataset(root_dir = 'parsed-20k/raw_dataset2.csv', dataset_name = 'parsed-20k/stats_dataset-6class-400.csv')
 
 if __name__ == '__main__':
-    constructLomanStatsDataset()
-    exit(0)
+    #constructLomanStatsDataset()
+    #exit(0)
     #with h5py.File('./loman/Zymo-GridION-EVEN-BB-SN-PCR-R10HC_multi/batch_0.fast5') as hdf_file:
     #    log_hdf_file(hdf_file)
     #exit(0)
@@ -289,34 +312,15 @@ if __name__ == '__main__':
                 print(count)
                 df.to_csv("test.csv")
                 exit(0)
-        print(count)
-        df.to_csv("classified_reads.csv")'''
-    #print("Liste" in shorter)
-    #exit(0)
-    #df = pd.read_csv("./loman/files/final/final-signals-short.txt",  sep=" ", header = None)
-    #df.columns = ["read_id", "read_num", "ch", "class", "value"]
-    #df = df[df['class'].isin(shorter)]
-    #print(len(df))
-    #df.to_csv("./loman/files/final/final-signals-short-filtered.csv")
-    df = pd.read_csv("./loman/files/final/final-signals-short.txt",  sep=" ", header = None)
-    df.columns = ["read_id", "read_num", "ch", "class", "value"]
-    #print(df)
-    for short in shorter:
-        print(len(df.loc[df['class'] == short]))
+        print(count)'''
 
-    #hf = h5py.File('data.h5', 'w')
-    #hf.create_dataset('dataset', data=signal)
-    #hf.close()
-    
-    #df = pd.read_csv('csv/parsed/stats_dataset-6class-400.csv') 
-    #lab = df.loc[df['label'] == "klebsiella_"]
-    #print(len(lab))
-    #parser = ArgumentParser(add_help=False)
-    #parser.add_argument('--filename', type=str)
-    #parser.add_argument('--outfile', type=str)
+    parser = ArgumentParser(add_help=False)
+    parser.add_argument('--filename', type=str)
+    parser.add_argument('--outfile', type=str)
+    params = parser.parse_args()
 
-    #params = parser.parse_args()
     #readFasta(params.filename, params.outfile)
-    #constructDatasetCSV("../Signals/parsed_true/", dataset_name = "parsed/dataset-reads.csv")
-    #constructRawSignaValuesCSV(root_dir = "parsed/dataset-reads.csv", dataset_name = 'parsed/raw_dataset.csv')
-    #constructStatsDataset(root_dir = 'parsed/raw_dataset.csv', dataset_name = 'parsed/stats_dataset-6class-400.csv')
+    #exit(0)
+    #constructDatasetCSV("../Signals/parsed-50k-signals/", dataset_name = "parsed-50k/dataset-reads.csv")
+    #constructRawSignalValuesCSV(root_dir = "parsed-50k/dataset-reads.csv", dataset_name = 'parsed-50k/raw_dataset.csv')
+    constructStatsDataset(root_dir = 'parsed-20k/raw_dataset.csv', dataset_name = 'parsed-20k/stats_dataset-6class.csv')

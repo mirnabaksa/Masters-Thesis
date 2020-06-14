@@ -98,7 +98,7 @@ from torchvision.transforms import ToTensor
 from mpl_toolkits.mplot3d import Axes3D
 
 
-distinct_labels = ["bacillus anthracis", "ecoli", "yersinia pestis", "pseudomonas koreensis", "pantonea agglomerans", "klebsiella pneumoniae"]
+distinct_labels = ["Bacillus anthracis", "Ecoli", "Yersinia pestis", "Pseudomonas koreensis", "Pantonea agglomerans", "Klebsiella pneumoniae"]
 #distinct_labels = ["Enterococcus faecalis", "Staphylococcus aureus", "Listeria monocytogenes", "Lactobacillus fermentum", "Bacillus subtilis", "Escherichia coli"]
 #distinct_labels = [0,1,2,3]
 palette = np.array(sns.hls_palette(len(distinct_labels)))
@@ -110,38 +110,26 @@ from matplotlib.lines import Line2D
 def scatter(x, labels, three_d = False, subtitle=None):
     f = plt.figure( edgecolor='black')
     ax = f.add_subplot(111,projection=('3d' if three_d else None))
-    #if not three_d:
     ax.axis('off')
     plt.tight_layout()
-    #print(len(labels))
     
     classes = [distinct_labels[i] for i in set(labels)]
-    c = [palette[i+1] for i in labels]
+    c = [palette[i] for i in labels]
 
     values = labels
     if not three_d:
         ax.scatter(x[:,0], x[:,1], marker = "o", linewidth=1, facecolors=c, edgecolors=(0,0,0,1), s = 50, alpha = 0.3)
     else:
         ax.scatter(x[:,0], x[:,1], x[:,2],  marker = "o", linewidth=1, facecolors=c, edgecolors=(0,0,0,1), s = 160, alpha = 0.3)
-    #for label in labels:
-    #    idx = np.where(labels == label)
-    #    text_label = distinct_labels[label]
-    #    if three_d:
-    #        ax.scatter(x[idx,0], x[idx,1], x[idx,2],  marker = marker, linewidth=3,  label = text_label,s = 100,  facecolors='none', edgecolors = [colours.colors[label]])
-    #    else:
-    #        ax.scatter(x[idx,0], x[idx,1], marker = marker, linewidth=3, label = text_label, s = 100, facecolors='none', edgecolors = [colours.colors[label]])
+    
 
-    custom_lines = []
+    '''custom_lines = []
     cl = []
     for i, label in enumerate(classes):
         custom_lines.append(Line2D([0], [0], color=palette[i], lw=4))
         cl.append(label)
 
-    ax.legend(custom_lines, cl, prop={'size': 10}, loc = "upper right")
-
-    #if not three_d:
-    #ax.set_yticks([])
-    #ax.set_xticks([])
+    ax.legend(custom_lines, cl, prop={'size': 20}, loc = "upper right")'''
 
     buf = io.BytesIO()
     plt.savefig(buf, format = 'png')

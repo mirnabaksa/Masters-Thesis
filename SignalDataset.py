@@ -137,7 +137,7 @@ class StatsSubsetDataset(Dataset):
             self.df = self.df.append({"data" : data, "label" : self.get_label(label), "target" : target}, ignore_index = True)
 
 
-    def get_label(self, label):
+    '''def get_label(self, label):
         if label == "Enter":
             return 0
         if label == "Staph":
@@ -149,9 +149,9 @@ class StatsSubsetDataset(Dataset):
         if label == "Bacil":
             return 4
         if label == "Esche":
-            return 5
+            return 5'''
      
-    '''def get_label(self, label):
+    def get_label(self, label):
         if label == "ecoli":
             return 0
         if label == "pseudomonas_koreensis":
@@ -165,7 +165,7 @@ class StatsSubsetDataset(Dataset):
         if label == "klebsiella_pneumoniae":
             return 5
         else:
-            return label'''
+            return label
 
 
 
@@ -189,7 +189,7 @@ class StatsSubsetDataset(Dataset):
     def get_vector_len(self):
         return self.n_stats
 
-
+import math
 class StatsDataset(Dataset):
 
     def __init__(self, reference_csv, raw = True):
@@ -197,8 +197,8 @@ class StatsDataset(Dataset):
         self.df = pd.DataFrame(columns = ["data", "label"])
         
         for i in range(1, len(self.reference)):
-            index, label, data = self.reference.loc[i]
-            data = [[float(mean), float(med), float(stdev), float(iqr)] for mean, med, stdev, iqr in [line.split(",") for line in data.split("$")]]
+            label, data = self.reference.loc[i]
+            data = [[float(mean), float(med), float(stdev), float(iqr), float(en)] for mean, med, stdev, iqr, en in [line.split(",") for line in data.split("$")]]
             self.df = self.df.append({"data" : data, "label" : label}, ignore_index = True)
         self.n = len(self.df)
 

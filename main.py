@@ -21,26 +21,23 @@ def main(hparams):
     print(hparams)
     model = AutoencoderModel(hparams) if hparams.model == "auto" else TripletModel(hparams)
 
-    # distributed backend has to be ddp!
-    save_dir = "test" if hparams.no_log else  "finalexperiment/" + hparams.model + "-" + hparams.type + "/"
+    save_dir = "test" if hparams.no_log else  "longer/50k/" + hparams.model + "-" + hparams.type + "/"
     print(save_dir)
 
-    checkpoint_callback = ModelCheckpoint(
+    '''checkpoint_callback = ModelCheckpoint(
         filepath=save_dir  + str(hparams.num_classes) + "-classes/checkpoints",
         verbose=True,
         monitor='val_loss',
         mode='min'
-    )
-    #model = TripletModel.load_from_checkpoint('./finalexperiment/triplet-lstm/2-classes/_ckpt_epoch_87.ckpt')
+    )'''
 
     logger = TestTubeLogger(save_dir = save_dir, name = str(hparams.num_classes) + "-classes")
     trainer = pl.Trainer(
-    #    resume_from_checkpoint='./finalexperiment/triplet-lstm/2-classes/_ckpt_epoch_87.ckpt',
         logger = logger,
         gpus=1,
         #distributed_backend="ddp",
         max_epochs=hparams.epochs,
-        checkpoint_callback=checkpoint_callback
+        #checkpoint_callback=checkpoint_callback
     )
 
     trainer.fit(model)
@@ -58,9 +55,9 @@ if __name__ == '__main__':
 
     # network params
     parser.add_argument('--type', default="lstm", type=str)
-    parser.add_argument('--features', default=4, type=int)
+    parser.add_argument('--features', default=5, type=int)
     parser.add_argument('--num_layers', default=1, type=int)
-    parser.add_argument('--hidden_size', default=10, type=int)
+    parser.add_argument('--hidden_size', default=105, type=int)
     parser.add_argument('--drop_prob', default=0.0, type=float)
     parser.add_argument('--bidirectional', default = False, action='store_true')
     parser.add_argument('--min_max', default = False, action='store_true')
@@ -71,7 +68,7 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', default=100, type=int)
     parser.add_argument('--optimizer_name', default='adam', type=str)
     parser.add_argument('--batch_size', default=64, type=int)
-    parser.add_argument('--plot_every', default=10, type=int)
+    parser.add_argument('--plot_every', default=100, type=int)
     parser.add_argument('--threeD', default = False, action='store_true')
     parser.add_argument('--num_classes', default=2, type=int)
     

@@ -19,9 +19,9 @@ random.seed(SEED)
 
 def main(hparams):
     print(hparams)
-    ckpt = "./reference/triplet-lstm/4-classes/version_9/checkpoints/epoch=98.ckpt"
+    ckpt = "./longer/triplet-lstm/6-classes/version_16/checkpoints/epoch=31.ckpt"
 
-    save_dir = "test" if hparams.no_log else  "metrics/" + hparams.model + "-" + hparams.type + "/"
+    save_dir = "test" if hparams.no_log else  "longer/" + hparams.model + "-" + hparams.type + "/"
     model = TripletModel.load_from_checkpoint(ckpt)
 
     logger = TestTubeLogger(save_dir = save_dir, name = str(hparams.num_classes) + "-classes")
@@ -30,10 +30,9 @@ def main(hparams):
         logger = logger,
         gpus=1,
         #distributed_backend="ddp",
-        max_epochs=3
+        max_epochs=16
     )
     #trainer.fit(model)
-
     trainer.test(model)
   
     

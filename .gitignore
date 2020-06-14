@@ -15,9 +15,12 @@ loman
 vae
 finalexperiment
 /metrics
+/longer
 autoencoder
 auto
 clear.sh
 /metrics
 parsed-out
 meta_tags.csv
+loman.p
+/samelen

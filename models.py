@@ -126,7 +126,6 @@ class ConvVariationalAutoencoder(nn.Module):
 
         #sampling
         sample = self.sampling(z_mu, z_var)
-       # sample = sample.view(batch_size, 1, -1)
 
         out = self.dec(sample)
         out = out.view((batch_size, steps, features))
@@ -148,13 +147,9 @@ class ConvVariationalAutoencoder(nn.Module):
 
     def get_latent(self, input):
         batch_size, steps, features = input.shape
-        #print(input)
         input = input.view(batch_size, features, steps)
         hidden = self.enc(input)
-        #print(hidden)
-        #exit(0)
         return hidden.squeeze()
-        #print(hidden.shape)
         
         z_mu = self.mu(hidden)
         z_var = self.var(hidden)
@@ -250,9 +245,6 @@ class ConvolutionalAutoencoder(nn.Module):
             nn.ReLU(),
             nn.ConvTranspose1d(32, self.in_size, 3, stride=1, padding=1),
             nn.ReLU(),
-            nn.Linear(212, 209),
-            #nn.ReLU(),
-            #nn.PReLU()
         )
 
         
@@ -290,12 +282,10 @@ class TimeDistributed(nn.Module):
         if len(x.size()) <= 2:
             return self.module(x)
 
-        # Squash samples and timesteps into a single axis
         x_reshape = x.contiguous().view(-1, x.size(-1))  # (samples * timesteps, input_size)
 
         y = self.module(x_reshape)
 
-        # We have to reshape Y
         if self.batch_first:
             y = y.contiguous().view(x.size(0), -1, y.size(-1))  # (samples, timesteps, output_size)
         else:
@@ -346,9 +336,6 @@ class LSTMAutoEncoder(nn.Module):
     def get_latent(self, input):
         batch_size, steps, _ = input.shape
         out, (hidden, _) = self.enc1(input)
-        #hidden = torch.cat((hidden[0], hidden[1]), 1)
-        #out, (hidden, _) = self.enc2(out)
-        #out, (hidden, _) = self.enc3(out)
         hidden = hidden.view(1, 2, batch_size, self.hidden_size)
         hidden = hidden[-1]
         hidden = torch.add(hidden[0], hidden[1])
@@ -372,9 +359,6 @@ class Encoder(nn.Module):
             nn.LSTM(32, 8, batch_first = True),
             nn.LSTM(8, input_size,  batch_first = True) )
        
-
-        #nn.init.orthogonal_(self.NN.weight_ih_l0, gain=np.sqrt(2))
-        #nn.init.orthogonal_(self.NN.weight_hh_l0, gain=np.sqrt(2))
      
     def forward(self, input):
         #print(input.shape)
@@ -466,8 +450,6 @@ class TripletLSTMEncoder(nn.Module):
         #out, (hidden, c) = self.NN1(out)
         #out, (hidden, c) = self.NN2(out)
         #out, (hidden, c) = self.NN3(out)
-        #out = self.drop(out)
-        #_, (hidden, _) = self.NN2(out)
     
         hidden = hidden.view(self.num_layers, 2 if self.bidirectional else 1, batch_size, self.hidden_size)
         hidden = hidden[-1]
@@ -480,9 +462,6 @@ class TripletLSTMEncoder(nn.Module):
 
         if self.print:
             print(hidden.shape)
-        #print(out.shape)
-        #out = self.pool(out)
-        #print(out.shape)
         #hidden = self.dense(hidden)
         #hidden = F.normalize(hidden)
         return hidden.squeeze()
@@ -522,7 +501,6 @@ class TripletConvolutionalEncoder(nn.Module):
 
             #nn.Flatten(),
             #nn.Linear(3328, 100),
-            #nn.PReLU(),
             nn.Linear(51, 48),
             #nn.Softmax()
             )
